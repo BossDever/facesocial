@@ -8,3 +8,7 @@ node_modules
 *.index
 *.zip
 *.zip.zip
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
