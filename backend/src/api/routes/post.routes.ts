@@ -1,5 +1,4 @@
 // backend/src/api/routes/post.routes.ts
-
 import express from 'express';
 import * as postController from '../controllers/post.controller';
 import { authenticate } from '../middleware/auth.middleware';
