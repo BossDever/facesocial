@@ -1,3 +1,4 @@
+// backend/src/api/routes/user.routes.ts
 import express, { Request, Response } from 'express';
 import * as userController from '../controllers/user.controller';
 import { authenticate } from '../middleware/auth.middleware';
