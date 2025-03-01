@@ -1,29 +1,31 @@
-// อัปเดตไฟล์ frontend/src/app/services/api.service.ts
+// frontend/src/app/services/api.service.ts
 
 'use client';
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { 
+  API_BASE_URL, 
+  API_TIMEOUT, 
+  DEFAULT_HEADERS, 
+  API_ENDPOINTS,
+  AUTH_TOKEN_KEY,
+  USER_DATA_KEY,
+  replaceParams
+} from '../config/api.config';
 
 /**
  * API Service สำหรับการเชื่อมต่อกับ Backend API
  */
 class ApiService {
   private axiosInstance: AxiosInstance;
-  private readonly API_BASE_URL: string;
   private authToken: string | null = null;
   
   constructor() {
-    // กำหนด URL ของ API
-    this.API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-    
     // สร้าง axios instance
     this.axiosInstance = axios.create({
-      baseURL: this.API_BASE_URL,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      timeout: 30000 // 30 วินาที
+      baseURL: API_BASE_URL,
+      headers: DEFAULT_HEADERS,
+      timeout: API_TIMEOUT
     });
     
     // เพิ่ม request interceptor สำหรับการแนบ token
@@ -70,7 +72,7 @@ class ApiService {
     
     // โหลด token จาก localStorage เมื่อสร้าง instance
     if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('authToken');
+      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
       if (storedToken) {
         this.authToken = storedToken;
       }
@@ -86,7 +88,7 @@ class ApiService {
     
     // เก็บ token ลงใน localStorage
     if (typeof window !== 'undefined') {
-      localStorage.setItem('authToken', token);
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
     }
   }
   
@@ -98,7 +100,7 @@ class ApiService {
     
     // ลบ token จาก localStorage
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken');
+      localStorage.removeItem(AUTH_TOKEN_KEY);
     }
   }
   
@@ -116,7 +118,7 @@ class ApiService {
    */
   async checkHealth(): Promise<any> {
     try {
-      const response = await this.axiosInstance.get('/health');
+      const response = await this.axiosInstance.get(API_ENDPOINTS.HEALTH);
       return response.data;
     } catch (error) {
       console.error('Health check failed:', error);
@@ -130,7 +132,7 @@ class ApiService {
    */
   async getApiStatus(): Promise<any> {
     try {
-      const response = await this.axiosInstance.get('/auth/status');
+      const response = await this.axiosInstance.get(API_ENDPOINTS.AUTH.API_STATUS);
       return response.data;
     } catch (error) {
       console.error('Failed to get API status:', error);
@@ -145,7 +147,7 @@ class ApiService {
    */
   async registerUser(userData: any): Promise<any> {
     try {
-      const response = await this.axiosInstance.post('/auth/register', userData);
+      const response = await this.axiosInstance.post(API_ENDPOINTS.AUTH.REGISTER, userData);
       
       // เก็บ token หลังจากลงทะเบียนสำเร็จ
       if (response.data.token) {
@@ -167,7 +169,8 @@ class ApiService {
    */
   async storeFaceData(userId: string, faceData: any): Promise<any> {
     try {
-      const response = await this.axiosInstance.post(`/auth/face-data/${userId}`, faceData);
+      const endpoint = `${API_ENDPOINTS.AUTH.STORE_FACE_DATA}/${userId}`;
+      const response = await this.axiosInstance.post(endpoint, faceData);
       return response.data;
     } catch (error) {
       console.error('Failed to store face data:', error);
@@ -182,7 +185,7 @@ class ApiService {
    */
   async login(credentials: { username: string, password: string }): Promise<any> {
     try {
-      const response = await this.axiosInstance.post('/auth/login', credentials);
+      const response = await this.axiosInstance.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
       
       // เก็บ token หลังจากเข้าสู่ระบบสำเร็จ
       if (response.data.token) {
@@ -191,7 +194,7 @@ class ApiService {
       
       // เก็บข้อมูลผู้ใช้ใน localStorage
       if (response.data.user) {
-        localStorage.setItem('userData', JSON.stringify(response.data.user));
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify(response.data.user));
       }
       
       return response.data;
@@ -208,7 +211,7 @@ class ApiService {
    */
   async loginWithFace(faceData: { embeddings: number[], imageBase64: string }): Promise<any> {
     try {
-      const response = await this.axiosInstance.post('/auth/login-face', faceData);
+      const response = await this.axiosInstance.post(API_ENDPOINTS.AUTH.LOGIN_FACE, faceData);
       
       // เก็บ token หลังจากเข้าสู่ระบบสำเร็จ
       if (response.data.token) {
@@ -217,7 +220,7 @@ class ApiService {
       
       // เก็บข้อมูลผู้ใช้ใน localStorage
       if (response.data.user) {
-        localStorage.setItem('userData', JSON.stringify(response.data.user));
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify(response.data.user));
       }
       
       return response.data;
@@ -233,13 +236,13 @@ class ApiService {
    */
   async logout(): Promise<any> {
     try {
-      const response = await this.axiosInstance.post('/auth/logout');
+      const response = await this.axiosInstance.post(API_ENDPOINTS.AUTH.LOGOUT);
       
       // ล้าง token หลังจากออกจากระบบ
       this.clearAuthToken();
       
       // ล้างข้อมูลผู้ใช้จาก localStorage
-      localStorage.removeItem('userData');
+      localStorage.removeItem(USER_DATA_KEY);
       
       return response.data;
     } catch (error) {
@@ -247,7 +250,7 @@ class ApiService {
       this.clearAuthToken();
       
       // ล้างข้อมูลผู้ใช้จาก localStorage
-      localStorage.removeItem('userData');
+      localStorage.removeItem(USER_DATA_KEY);
       
       console.warn('Logout error:', error);
       return { success: true, message: 'ออกจากระบบสำเร็จ (ล้าง token แล้ว)' };
@@ -260,10 +263,10 @@ class ApiService {
    */
   async getCurrentUser(): Promise<any> {
     try {
-      const response = await this.axiosInstance.get('/auth/me');
+      const response = await this.axiosInstance.get(API_ENDPOINTS.AUTH.CURRENT_USER);
       
       // อัปเดตข้อมูลผู้ใช้ใน localStorage
-      localStorage.setItem('userData', JSON.stringify(response.data));
+      localStorage.setItem(USER_DATA_KEY, JSON.stringify(response.data));
       
       return response.data;
     } catch (error) {
@@ -279,7 +282,8 @@ class ApiService {
    */
   async getUserById(userId: string): Promise<any> {
     try {
-      const response = await this.axiosInstance.get(`/users/${userId}`);
+      const endpoint = `${API_ENDPOINTS.USER.GET_BY_ID}/${userId}`;
+      const response = await this.axiosInstance.get(endpoint);
       return response.data;
     } catch (error) {
       console.error('Failed to get user by ID:', error);
@@ -294,7 +298,8 @@ class ApiService {
    */
   async getUserFaces(userId: string): Promise<any> {
     try {
-      const response = await this.axiosInstance.get(`/users/${userId}/faces`);
+      const endpoint = replaceParams(API_ENDPOINTS.USER.GET_FACES, { id: userId });
+      const response = await this.axiosInstance.get(endpoint);
       return response.data;
     } catch (error) {
       console.error('Failed to get user faces:', error);
@@ -311,7 +316,8 @@ class ApiService {
    */
   async getUserPosts(userId: string, page: number = 1, limit: number = 10): Promise<any> {
     try {
-      const response = await this.axiosInstance.get(`/users/${userId}/posts`, {
+      const endpoint = replaceParams(API_ENDPOINTS.USER.GET_POSTS, { id: userId });
+      const response = await this.axiosInstance.get(endpoint, {
         params: { page, limit }
       });
       return response.data;
@@ -328,12 +334,12 @@ class ApiService {
    */
   async updateUserProfile(profileData: any): Promise<any> {
     try {
-      const response = await this.axiosInstance.patch('/auth/profile', profileData);
+      const response = await this.axiosInstance.patch(API_ENDPOINTS.AUTH.UPDATE_PROFILE, profileData);
       
       // อัปเดตข้อมูลผู้ใช้ใน localStorage
       if (response.data.user) {
-        const currentUserData = JSON.parse(localStorage.getItem('userData') || '{}');
-        localStorage.setItem('userData', JSON.stringify({
+        const currentUserData = JSON.parse(localStorage.getItem(USER_DATA_KEY) || '{}');
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify({
           ...currentUserData,
           ...response.data.user
         }));
@@ -353,7 +359,8 @@ class ApiService {
    */
   async followUser(userId: string): Promise<any> {
     try {
-      const response = await this.axiosInstance.post(`/users/${userId}/follow`);
+      const endpoint = replaceParams(API_ENDPOINTS.USER.FOLLOW, { id: userId });
+      const response = await this.axiosInstance.post(endpoint);
       return response.data;
     } catch (error) {
       console.error('Failed to follow user:', error);
@@ -368,10 +375,142 @@ class ApiService {
    */
   async unfollowUser(userId: string): Promise<any> {
     try {
-      const response = await this.axiosInstance.delete(`/users/${userId}/follow`);
+      const endpoint = replaceParams(API_ENDPOINTS.USER.UNFOLLOW, { id: userId });
+      const response = await this.axiosInstance.delete(endpoint);
       return response.data;
     } catch (error) {
       console.error('Failed to unfollow user:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * ดึงโพสต์ทั้งหมด
+   * @param page หน้าที่ต้องการ
+   * @param limit จำนวนรายการต่อหน้า
+   * @returns รายการโพสต์
+   */
+  async getPosts(page: number = 1, limit: number = 10): Promise<any> {
+    try {
+      const response = await this.axiosInstance.get(API_ENDPOINTS.POST.GET_ALL, {
+        params: { page, limit }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get posts:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * ดึงโพสต์ตาม ID
+   * @param postId ID ของโพสต์
+   * @returns ข้อมูลโพสต์
+   */
+  async getPostById(postId: string): Promise<any> {
+    try {
+      const endpoint = replaceParams(API_ENDPOINTS.POST.GET_BY_ID, { id: postId });
+      const response = await this.axiosInstance.get(endpoint);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get post by ID:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * สร้างโพสต์ใหม่
+   * @param postData ข้อมูลโพสต์ (content, media)
+   * @returns ข้อมูลโพสต์ที่สร้าง
+   */
+  async createPost(postData: any): Promise<any> {
+    try {
+      const response = await this.axiosInstance.post(API_ENDPOINTS.POST.CREATE, postData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create post:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * ลบโพสต์
+   * @param postId ID ของโพสต์
+   * @returns สถานะการลบ
+   */
+  async deletePost(postId: string): Promise<any> {
+    try {
+      const endpoint = replaceParams(API_ENDPOINTS.POST.DELETE, { id: postId });
+      const response = await this.axiosInstance.delete(endpoint);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to delete post:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * กดไลค์โพสต์
+   * @param postId ID ของโพสต์
+   * @returns สถานะการกดไลค์
+   */
+  async likePost(postId: string): Promise<any> {
+    try {
+      const endpoint = replaceParams(API_ENDPOINTS.POST.LIKE, { id: postId });
+      const response = await this.axiosInstance.post(endpoint);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to like post:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * ยกเลิกการกดไลค์โพสต์
+   * @param postId ID ของโพสต์
+   * @returns สถานะการยกเลิกการกดไลค์
+   */
+  async unlikePost(postId: string): Promise<any> {
+    try {
+      const endpoint = replaceParams(API_ENDPOINTS.POST.UNLIKE, { id: postId });
+      const response = await this.axiosInstance.delete(endpoint);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to unlike post:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * แสดงความคิดเห็นในโพสต์
+   * @param postId ID ของโพสต์
+   * @param content เนื้อหาความคิดเห็น
+   * @returns ข้อมูลความคิดเห็น
+   */
+  async commentPost(postId: string, content: string): Promise<any> {
+    try {
+      const endpoint = replaceParams(API_ENDPOINTS.POST.COMMENT, { id: postId });
+      const response = await this.axiosInstance.post(endpoint, { content });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to comment post:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * ลบความคิดเห็น
+   * @param postId ID ของโพสต์
+   * @param commentId ID ของความคิดเห็น
+   * @returns สถานะการลบ
+   */
+  async deleteComment(postId: string, commentId: string): Promise<any> {
+    try {
+      const endpoint = replaceParams(API_ENDPOINTS.POST.DELETE_COMMENT, { id: postId, commentId });
+      const response = await this.axiosInstance.delete(endpoint);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to delete comment:', error);
       throw error;
     }
   }
