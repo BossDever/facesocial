@@ -1,0 +1,174 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ผู้ใช้งาน
+model User {
+  id             String       @id @default(uuid())
+  username       String       @unique
+  email          String       @unique
+  password       String
+  firstName      String?
+  lastName       String?
+  profileImage   String?
+  isActive       Boolean      @default(true)
+  emailVerified  Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  faceData       FaceData[]
+  posts          Post[]
+  likes          Like[]
+  comments       Comment[]
+  following      Follow[]     @relation("follower")
+  followers      Follow[]     @relation("following")
+  faceTags       FaceTag[]
+  accessLogs     AccessLog[]
+}
+
+// ข้อมูลใบหน้า
+model FaceData {
+  id             String       @id @default(uuid())
+  userId         String
+  embeddings     Float[]      // เก็บ face embeddings เป็น array ของ float
+  imageUrl       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  user           User         @relation(fields: [userId], references: [id])
+}
+
+// โพสต์
+model Post {
+  id             String       @id @default(uuid())
+  userId         String
+  content        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  user           User         @relation(fields: [userId], references: [id])
+  media          Media[]
+  likes          Like[]
+  comments       Comment[]
+}
+
+// มีเดีย (รูปภาพ/วิดีโอในโพสต์)
+model Media {
+  id             String       @id @default(uuid())
+  postId         String
+  type           String       // 'image' หรือ 'video'
+  url            String
+  createdAt      DateTime     @default(now())
+  
+  post           Post         @relation(fields: [postId], references: [id])
+  faceTags       FaceTag[]
+}
+
+// แท็กใบหน้าในรูปภาพ
+model FaceTag {
+  id             String       @id @default(uuid())
+  mediaId        String
+  userId         String
+  positionX      Float
+  positionY      Float
+  width          Float
+  height         Float
+  createdAt      DateTime     @default(now())
+  
+  media          Media        @relation(fields: [mediaId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+}
+
+// ไลค์
+model Like {
+  id             String       @id @default(uuid())
+  postId         String
+  userId         String
+  createdAt      DateTime     @default(now())
+  
+  post           Post         @relation(fields: [postId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+  
+  @@unique([postId, userId])
+}
+
+// ความคิดเห็น
+model Comment {
+  id             String       @id @default(uuid())
+  postId         String
+  userId         String
+  content        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  post           Post         @relation(fields: [postId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+}
+
+// การติดตาม
+model Follow {
+  id             String       @id @default(uuid())
+  followerId     String
+  followingId    String
+  createdAt      DateTime     @default(now())
+  
+  follower       User         @relation("follower", fields: [followerId], references: [id])
+  following      User         @relation("following", fields: [followingId], references: [id])
+  
+  @@unique([followerId, followingId])
+}
+
+// บันทึกการเข้าถึง
+model AccessLog {
+  id             String       @id @default(uuid())
+  userId         String
+  type           String       // 'login', 'logout', 'face_detection', 'entry', 'exit'
+  location       String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime     @default(now())
+  
+  user           User         @relation(fields: [userId], references: [id])
+}
+
+// สถานะ API
+model ApiStatus {
+  id             String       @id @default(uuid())
+  name           String       @unique
+  endpoint       String       @unique
+  status         String       // 'active', 'degraded', 'down'
+  responseTime   Float        // milliseconds
+  successRate    Float        // percentage
+  lastChecked    DateTime     @default(now())
+}
+
+// สถานะโมเดล AI
+model ModelStatus {
+  id             String       @id @default(uuid())
+  name           String       @unique
+  version        String
+  status         String       // 'online', 'offline', 'degraded'
+  accuracy       Float        // percentage
+  inferenceTime  Float        // milliseconds
+  lastTested     DateTime     @default(now())
+}
+
+// สถานะฟีเจอร์
+model FeatureStatus {
+  id             String       @id @default(uuid())
+  name           String       @unique
+  description    String?
+  status         String       // 'completed', 'in_progress', 'planned'
+  progress       Float?       // percentage
+  startDate      DateTime?
+  targetDate     DateTime?
+  updatedAt      DateTime     @updatedAt
+}
