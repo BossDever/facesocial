@@ -64,14 +64,18 @@ model Post {
 
 // มีเดีย (รูปภาพ/วิดีโอในโพสต์)
 model Media {
-  id             String       @id @default(uuid())
-  postId         String
-  type           String       // 'image' หรือ 'video'
-  url            String
-  createdAt      DateTime     @default(now())
+  id               String       @id @default(uuid())
+  postId           String
+  type             String       // 'image' หรือ 'video'
+  url              String
+  filename         String?      // เพิ่มฟิลด์นี้
+  originalFilename String?      // เพิ่มฟิลด์นี้
+  mimeType         String?      // เพิ่มฟิลด์นี้
+  size             Int?         // เพิ่มฟิลด์นี้
+  createdAt        DateTime     @default(now())
   
-  post           Post         @relation(fields: [postId], references: [id])
-  faceTags       FaceTag[]
+  post             Post         @relation(fields: [postId], references: [id])
+  faceTags         FaceTag[]
 }
 
 // แท็กใบหน้าในรูปภาพ
