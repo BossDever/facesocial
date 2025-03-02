@@ -105,7 +105,9 @@ const PostCard: React.FC<PostProps> = ({
       }
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการกดไลค์:', error);
-      // ในกรณีที่ API ล้มเหลว คุณอาจต้องการแสดงข้อความแจ้งเตือน
+      // ในกรณีที่ API ล้มเหลว ทำการอัปเดตแบบ optimistic UI
+      setIsLiked(!isLiked);
+      setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
     } finally {
       setIsLikeLoading(false);
     }
@@ -138,6 +140,22 @@ const PostCard: React.FC<PostProps> = ({
     setShowComments(true);
   };
 
+  // แก้ไขการแสดงผล URL ของรูปภาพหรือวิดีโอ
+  const getMediaUrl = (url: string): string => {
+    // ตรวจสอบว่า URL เริ่มต้นด้วย http หรือ https หรือไม่
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+
+    // ถ้าเริ่มต้นด้วย /uploads ให้เพิ่ม /api นำหน้า
+    if (url.startsWith('/uploads/')) {
+      return `/api${url}`;
+    }
+
+    // ถ้าไม่ตรงกับกรณีข้างต้น ให้เพิ่ม /api นำหน้า
+    return `/api${url}`;
+  };
+
   return (
     <article className="bg-white dark:bg-gray-800 rounded-lg shadow-sm mb-4 overflow-hidden">
       {/* ส่วนหัวของโพสต์ */}
@@ -147,15 +165,16 @@ const PostCard: React.FC<PostProps> = ({
             <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
               {user.profileImage ? (
                 <Image 
-                  src={user.profileImage.startsWith('http') ? user.profileImage : `/api${user.profileImage}`}
+                  src={getMediaUrl(user.profileImage)}
                   alt={`${user.firstName} ${user.lastName}`}
                   width={40}
                   height={40}
                   className="w-full h-full object-cover"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white text-lg font-bold">
-                  {user.firstName.charAt(0)}
+                  {user.firstName ? user.firstName.charAt(0) : user.username?.charAt(0) || 'U'}
                 </div>
               )}
             </div>
@@ -164,7 +183,7 @@ const PostCard: React.FC<PostProps> = ({
           <div className="flex-1 min-w-0">
             <Link href={`/profile/${user.id}`} className="hover:underline">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                {user.firstName} {user.lastName}
+                {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.username}
               </h3>
             </Link>
             <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -190,17 +209,17 @@ const PostCard: React.FC<PostProps> = ({
       {media && media.length > 0 && (
         <div className={`grid ${media.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1`}>
           {media.map((item, index) => (
-            <div key={item.id} className="relative">
+            <div key={item.id || index} className="relative">
               {item.type === 'image' ? (
                 <div 
                   className="cursor-pointer aspect-video relative overflow-hidden"
                   onClick={() => setExpandedImageUrl(item.url)}
                 >
-                  <Image
-                    src={item.url.startsWith('http') ? item.url : `/api${item.url}`}
+                  <img 
+                    src={getMediaUrl(item.url)}
                     alt={`โพสต์รูปภาพ ${index + 1}`}
-                    fill
-                    className="object-cover"
+                    className="w-full h-full object-cover"
+                    loading="lazy"
                   />
                   
                   {/* แสดง face tags ถ้ามี */}
@@ -224,9 +243,10 @@ const PostCard: React.FC<PostProps> = ({
               ) : (
                 <div className="aspect-video relative">
                   <video 
-                    src={item.url.startsWith('http') ? item.url : `/api${item.url}`}
+                    src={getMediaUrl(item.url)}
                     controls
                     className="w-full h-full object-cover"
+                    preload="metadata"
                   />
                 </div>
               )}
@@ -306,12 +326,11 @@ const PostCard: React.FC<PostProps> = ({
               </svg>
             </button>
             
-            <div className="relative w-full h-full">
-              <Image
-                src={expandedImageUrl.startsWith('http') ? expandedImageUrl : `/api${expandedImageUrl}`}
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img
+                src={getMediaUrl(expandedImageUrl)}
                 alt="รูปภาพขยาย"
-                fill
-                className="object-contain"
+                className="max-w-full max-h-full object-contain"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>

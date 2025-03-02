@@ -1,27 +1,41 @@
 // frontend/src/app/config/api.config.ts
 
-// API Base URL
+/**
+ * Base URL สำหรับการเชื่อมต่อกับ Backend API
+ */
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api';
 
-// API Timeout (milliseconds)
-export const API_TIMEOUT = 30000;
+/**
+ * Timeout สำหรับการเชื่อมต่อกับ API (ms)
+ */
+export const API_TIMEOUT = 30000; // 30 วินาที
 
-// Default Headers
+/**
+ * Headers เริ่มต้นสำหรับการส่งคำขอไปยัง API
+ */
 export const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
   'Accept': 'application/json'
 };
 
-// Local Storage Keys
+/**
+ * Key สำหรับเก็บ auth token ใน localStorage
+ */
 export const AUTH_TOKEN_KEY = 'auth_token';
+
+/**
+ * Key สำหรับเก็บข้อมูลผู้ใช้ใน localStorage
+ */
 export const USER_DATA_KEY = 'user_data';
 
-// API Endpoints
+/**
+ * เส้นทาง API ทั้งหมด
+ */
 export const API_ENDPOINTS = {
-  // Health Check
+  // Health check
   HEALTH: '/health',
   
-  // Auth API
+  // Authentication
   AUTH: {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
@@ -30,20 +44,20 @@ export const API_ENDPOINTS = {
     CURRENT_USER: '/auth/me',
     UPDATE_PROFILE: '/auth/profile',
     STORE_FACE_DATA: '/auth/face-data',
-    API_STATUS: '/auth/status'
+    API_STATUS: '/auth/status',
   },
   
-  // User API
+  // User
   USER: {
     GET_BY_ID: '/users/:id',
     GET_FACES: '/users/:id/faces',
     GET_POSTS: '/users/:id/posts',
     GET_ACCESS_LOGS: '/users/:id/access-logs',
     FOLLOW: '/users/:id/follow',
-    UNFOLLOW: '/users/:id/follow'
+    UNFOLLOW: '/users/:id/follow',
   },
   
-  // Post API
+  // Post
   POST: {
     GET_ALL: '/posts',
     GET_BY_ID: '/posts/:id',
@@ -53,26 +67,24 @@ export const API_ENDPOINTS = {
     UNLIKE: '/posts/:id/like',
     COMMENT: '/posts/:id/comment',
     DELETE_COMMENT: '/posts/:id/comment/:commentId',
-    GET_COMMENTS: '/posts/:id/comments',
     GET_LIKE_COUNT: '/posts/:id/like-count',
-    CHECK_LIKED: '/posts/:id/is-liked'
+    GET_COMMENTS: '/posts/:id/comments',
+    CHECK_LIKED: '/posts/:id/liked',
   },
   
-  // Upload API
+  // Upload
   UPLOAD: {
     FILES: '/uploads/files',
     PROFILE_IMAGE: '/uploads/profile-image',
-    POST_MEDIA: '/uploads/post-media'
+    POST_MEDIA: '/uploads/post-media',
   }
 };
 
 /**
- * ฟังก์ชันแทนที่พารามิเตอร์ใน URL
- * เช่น replaceParams('/users/:id', { id: '123' }) จะได้ '/users/123'
- * 
- * @param url URL ที่มีพารามิเตอร์
- * @param params Object ของพารามิเตอร์ที่ต้องการแทนที่
- * @returns URL ที่แทนที่พารามิเตอร์แล้ว
+ * แทนที่พารามิเตอร์ใน URL
+ * @param url URL ที่มีพารามิเตอร์ (เช่น /users/:id/posts)
+ * @param params พารามิเตอร์ที่ต้องการแทนที่ (เช่น { id: '123' })
+ * @returns URL ที่แทนที่พารามิเตอร์แล้ว (เช่น /users/123/posts)
  */
 export const replaceParams = (url: string, params: Record<string, string>): string => {
   let result = url;
