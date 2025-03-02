@@ -22,9 +22,10 @@ export const register = async (req: Request, res: Response) => {
     });
 
     if (existingUser) {
-      return res.status(400).json({
+      res.status(400).json({
         message: 'ชื่อผู้ใช้หรืออีเมลนี้มีผู้ใช้งานแล้ว'
       });
+      return;
     }
 
     // เข้ารหัสรหัสผ่าน
@@ -51,14 +52,14 @@ export const register = async (req: Request, res: Response) => {
     // ส่งข้อมูลผู้ใช้กลับไป (ไม่ส่ง password)
     const { password: _, ...userWithoutPassword } = newUser;
 
-    return res.status(201).json({
+    res.status(201).json({
       message: 'ลงทะเบียนสำเร็จ',
       user: userWithoutPassword,
       token
     });
   } catch (error: any) {
     console.error('Register error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการลงทะเบียน',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -81,13 +82,15 @@ export const login = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+      res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+      return;
     }
 
     // ตรวจสอบรหัสผ่าน
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+      res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+      return;
     }
 
     // สร้าง token
@@ -111,14 +114,14 @@ export const login = async (req: Request, res: Response) => {
     // ส่งข้อมูลผู้ใช้กลับไป (ไม่ส่ง password)
     const { password: _, ...userWithoutPassword } = user;
 
-    return res.status(200).json({
+    res.status(200).json({
       message: 'เข้าสู่ระบบสำเร็จ',
       user: userWithoutPassword,
       token
     });
   } catch (error: any) {
     console.error('Login error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -131,7 +134,8 @@ export const loginWithFace = async (req: Request, res: Response) => {
     const { embeddings } = req.body;
 
     if (!embeddings || !Array.isArray(embeddings)) {
-      return res.status(400).json({ message: 'ข้อมูล embeddings ไม่ถูกต้อง' });
+      res.status(400).json({ message: 'ข้อมูล embeddings ไม่ถูกต้อง' });
+      return;
     }
 
     // ดึงข้อมูล face embeddings ทั้งหมดจากฐานข้อมูล
@@ -179,7 +183,8 @@ export const loginWithFace = async (req: Request, res: Response) => {
     }
 
     if (!matchedUser) {
-      return res.status(401).json({ message: 'ไม่พบใบหน้าที่ตรงกับในระบบ' });
+      res.status(401).json({ message: 'ไม่พบใบหน้าที่ตรงกับในระบบ' });
+      return;
     }
 
     // สร้าง token
@@ -203,7 +208,7 @@ export const loginWithFace = async (req: Request, res: Response) => {
     // ส่งข้อมูลผู้ใช้กลับไป (ไม่ส่ง password)
     const { password: _, ...userWithoutPassword } = matchedUser;
 
-    return res.status(200).json({
+    res.status(200).json({
       message: 'เข้าสู่ระบบด้วยใบหน้าสำเร็จ',
       user: userWithoutPassword,
       token,
@@ -211,7 +216,7 @@ export const loginWithFace = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Face login error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วยใบหน้า',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -243,10 +248,10 @@ export const logout = async (req: Request, res: Response) => {
       });
     }
 
-    return res.status(200).json({ message: 'ออกจากระบบสำเร็จ' });
+    res.status(200).json({ message: 'ออกจากระบบสำเร็จ' });
   } catch (error: any) {
     console.error('Logout error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการออกจากระบบ',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -260,7 +265,8 @@ export const storeFaceData = async (req: Request, res: Response) => {
     const { embeddings, imageBase64, score } = req.body;
 
     if (!embeddings || !Array.isArray(embeddings)) {
-      return res.status(400).json({ message: 'ข้อมูล embeddings ไม่ถูกต้อง' });
+      res.status(400).json({ message: 'ข้อมูล embeddings ไม่ถูกต้อง' });
+      return;
     }
 
     // ตรวจสอบว่าผู้ใช้มีอยู่จริง
@@ -269,7 +275,8 @@ export const storeFaceData = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'ไม่พบผู้ใช้' });
+      res.status(404).json({ message: 'ไม่พบผู้ใช้' });
+      return;
     }
 
     // บันทึกข้อมูลใบหน้า
@@ -281,7 +288,7 @@ export const storeFaceData = async (req: Request, res: Response) => {
       }
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       message: 'บันทึกข้อมูลใบหน้าสำเร็จ',
       faceData: {
         id: faceData.id,
@@ -291,7 +298,7 @@ export const storeFaceData = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Store face data error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูลใบหน้า',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -305,7 +312,8 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     
     if (!userId) {
-      return res.status(401).json({ message: 'ไม่ได้เข้าสู่ระบบ' });
+      res.status(401).json({ message: 'ไม่ได้เข้าสู่ระบบ' });
+      return;
     }
 
     // ดึงข้อมูลผู้ใช้
@@ -318,7 +326,6 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         firstName: true,
         lastName: true,
         profileImage: true,
-        bio: true,
         createdAt: true,
         isActive: true,
         emailVerified: true,
@@ -336,13 +343,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'ไม่พบผู้ใช้' });
+      res.status(404).json({ message: 'ไม่พบผู้ใช้' });
+      return;
     }
 
-    return res.status(200).json(user);
+    res.status(200).json(user);
   } catch (error: any) {
     console.error('Get current user error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการดึงข้อมูลผู้ใช้',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -401,13 +409,14 @@ export const getApiStatus = async (req: Request, res: Response) => {
         }
       });
       
-      return res.status(200).json(newApiStatus);
+      res.status(200).json(newApiStatus);
+      return;
     }
 
-    return res.status(200).json(apiStatus);
+    res.status(200).json(apiStatus);
   } catch (error: any) {
     console.error('Get API status error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการดึงข้อมูลสถานะ API',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -420,7 +429,8 @@ export const updateUserProfile = async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     
     if (!userId) {
-      return res.status(401).json({ message: 'ไม่ได้เข้าสู่ระบบ' });
+      res.status(401).json({ message: 'ไม่ได้เข้าสู่ระบบ' });
+      return;
     }
 
     const { firstName, lastName, profileImage, bio } = req.body;
@@ -432,7 +442,6 @@ export const updateUserProfile = async (req: Request, res: Response) => {
         firstName,
         lastName,
         profileImage,
-        bio,
         updatedAt: new Date()
       },
       select: {
@@ -442,19 +451,18 @@ export const updateUserProfile = async (req: Request, res: Response) => {
         firstName: true,
         lastName: true,
         profileImage: true,
-        bio: true,
         createdAt: true,
         updatedAt: true
       }
     });
 
-    return res.status(200).json({
+    res.status(200).json({
       message: 'อัปเดตข้อมูลโปรไฟล์สำเร็จ',
       user: updatedUser
     });
   } catch (error: any) {
     console.error('Update user profile error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูลโปรไฟล์',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });

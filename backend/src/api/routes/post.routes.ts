@@ -6,15 +6,15 @@ import { authenticate } from '../middleware/auth.middleware';
 const router = express.Router();
 
 // เส้นทาง API สำหรับจัดการโพสต์
-router.get('/', postController.getAllPosts);
-router.get('/:id', postController.getPostById);
-router.post('/', authenticate, postController.createPost);
-router.delete('/:id', authenticate, postController.deletePost);
+router.get('/', (req, res) => postController.getAllPosts(req, res));
+router.get('/:id', (req, res) => postController.getPostById(req, res));
+router.post('/', authenticate, (req, res) => postController.createPost(req, res));
+router.delete('/:id', authenticate, (req, res) => postController.deletePost(req, res));
 
 // เส้นทางสำหรับไลค์และความคิดเห็น
-router.post('/:id/like', authenticate, postController.likePost);
-router.delete('/:id/like', authenticate, postController.unlikePost);
-router.post('/:id/comment', authenticate, postController.commentPost);
-router.delete('/:id/comment/:commentId', authenticate, postController.deleteComment);
+router.post('/:id/like', authenticate, (req, res) => postController.likePost(req, res));
+router.delete('/:id/like', authenticate, (req, res) => postController.unlikePost(req, res));
+router.post('/:id/comment', authenticate, (req, res) => postController.commentPost(req, res));
+router.delete('/:id/comment/:commentId', authenticate, (req, res) => postController.deleteComment(req, res));
 
 export default router;

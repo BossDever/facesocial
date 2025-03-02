@@ -67,13 +67,21 @@ export const requireAdmin = async (req: Request, res: Response, next: NextFuncti
       return res.status(401).json({ message: 'ไม่ได้ยืนยันตัวตน' });
     }
     
-    // ตรวจสอบบทบาทของผู้ใช้
+    // เนื่องจากไม่มีฟิลด์ isAdmin ใน User Model ของ Prisma
+    // เราอาจต้องตรวจสอบด้วยวิธีอื่น เช่น ตรวจสอบจาก username หรือ email ที่เป็น admin
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { isAdmin: true }
+      where: { id: req.user.id }
     });
     
-    if (!user || !user.isAdmin) {
+    if (!user) {
+      return res.status(403).json({ message: 'ไม่มีสิทธิ์เข้าถึง' });
+    }
+    
+    // ตรวจสอบว่าเป็น admin (อาจใช้เงื่อนไขอื่น เช่น email ที่มีโดเมนเฉพาะ หรือ username ที่ขึ้นต้นด้วย admin)
+    // ตัวอย่าง: ตรวจสอบว่า username คือ 'admin' หรือไม่
+    const isAdmin = user.username === 'admin' || user.email === 'admin@example.com';
+    
+    if (!isAdmin) {
       return res.status(403).json({ message: 'ไม่มีสิทธิ์เข้าถึง' });
     }
     
