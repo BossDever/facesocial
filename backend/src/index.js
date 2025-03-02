@@ -28,7 +28,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' } // อนุญาตให้เข้าถึงไฟล์ static จากโดเมนอื่น
+}));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -38,7 +40,19 @@ const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('สร้างโฟลเดอร์ uploads สำเร็จ');
+  
+  // สร้างโฟลเดอร์ย่อยสำหรับแต่ละประเภทของไฟล์
+  const subDirs = ['images', 'videos', 'profile-images', 'post-media', 'general'];
+  subDirs.forEach(dir => {
+    const subDir = path.join(uploadsDir, dir);
+    if (!fs.existsSync(subDir)) {
+      fs.mkdirSync(subDir, { recursive: true });
+      console.log(`สร้างโฟลเดอร์ ${dir} สำเร็จ`);
+    }
+  });
 }
+
+// ตั้งค่า static folder สำหรับไฟล์ที่อัปโหลด
 app.use('/uploads', express.static(uploadsDir));
 
 // Middleware ตรวจสอบการยืนยันตัวตน
@@ -250,6 +264,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
         firstName: true,
         lastName: true,
         profileImage: true,
+        bio: true,
         createdAt: true,
         isActive: true,
         emailVerified: true,
@@ -414,55 +429,50 @@ app.get('/api/posts', async (req, res) => {
     const limitNum = parseInt(limit, 10);
     const skip = (pageNum - 1) * limitNum;
 
-    // สร้างข้อมูลโพสต์จำลอง
-    const posts = [
-      {
-        id: '1',
-        content: 'ยินดีต้อนรับสู่ FaceSocial!',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        user: {
-          id: '1',
-          username: 'admin',
-          firstName: 'Admin',
-          lastName: 'User',
-          profileImage: null
-        },
-        media: [],
-        _count: {
-          likes: 5,
-          comments: 2
-        }
+    // ดึงจำนวนโพสต์ทั้งหมด
+    const total = await prisma.post.count();
+
+    // ดึงโพสต์ตามเงื่อนไข
+    const posts = await prisma.post.findMany({
+      orderBy: {
+        createdAt: 'desc'
       },
-      {
-        id: '2',
-        content: 'นี่คือโพสต์ตัวอย่างสำหรับการทดสอบ API',
-        createdAt: new Date(Date.now() - 86400000), // เมื่อวาน
-        updatedAt: new Date(Date.now() - 86400000),
+      skip,
+      take: limitNum,
+      include: {
         user: {
-          id: '2',
-          username: 'testuser',
-          firstName: 'Test',
-          lastName: 'User',
-          profileImage: null
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            profileImage: true
+          }
         },
-        media: [],
+        media: true,
         _count: {
-          likes: 2,
-          comments: 1
+          select: {
+            likes: true,
+            comments: true
+          }
         }
       }
-    ];
+    });
+
+    // สร้างข้อมูล pagination
+    const totalPages = Math.ceil(total / limitNum);
+    const hasNext = pageNum < totalPages;
+    const hasPrev = pageNum > 1;
 
     return res.status(200).json({
       posts,
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: posts.length,
-        totalPages: Math.ceil(posts.length / limitNum),
-        hasNext: false,
-        hasPrev: false
+        total,
+        totalPages,
+        hasNext,
+        hasPrev
       }
     });
   } catch (error) {
@@ -492,7 +502,48 @@ app.post('/api/posts', authenticate, async (req, res) => {
         }
       });
   
-      // ดึงข้อมูลโพสต์พร้อม user ที่สร้าง
+      // ถ้ามีไฟล์ media แนบมาด้วย
+      if (req.body.media && Array.isArray(req.body.media)) {
+        // ตรวจสอบว่ามีโฟลเดอร์สำหรับเก็บไฟล์หรือไม่
+        const uploadDir = path.join(__dirname, '../uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        // วนลูปเพื่อสร้าง media สำหรับแต่ละไฟล์
+        for (const mediaItem of req.body.media) {
+          const { type, dataUrl } = mediaItem;
+          
+          // แปลง Data URL เป็นไฟล์
+          if (dataUrl && dataUrl.includes('base64')) {
+            // แยกส่วน metadata และ base64 data
+            const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            
+            if (matches && matches.length === 3) {
+              const base64Data = matches[2];
+              const buffer = Buffer.from(base64Data, 'base64');
+              
+              // สร้างชื่อไฟล์
+              const filename = `${Date.now()}-${Math.round(Math.random() * 1000)}.${type === 'image' ? 'jpg' : 'mp4'}`;
+              const filepath = path.join(uploadDir, filename);
+              
+              // บันทึกไฟล์
+              fs.writeFileSync(filepath, buffer);
+              
+              // สร้างข้อมูล media ในฐานข้อมูล
+              await prisma.media.create({
+                data: {
+                  postId: newPost.id,
+                  type,
+                  url: `/uploads/${filename}`
+                }
+              });
+            }
+          }
+        }
+      }
+
+      // ดึงข้อมูลโพสต์พร้อม media
       const post = await prisma.post.findUnique({
         where: { id: newPost.id },
         include: {
@@ -514,7 +565,7 @@ app.post('/api/posts', authenticate, async (req, res) => {
           }
         }
       });
-  
+
       return res.status(201).json({
         message: 'สร้างโพสต์สำเร็จ',
         post
