@@ -17,7 +17,6 @@ export const getUserById = async (req: Request, res: Response) => {
         firstName: true,
         lastName: true,
         profileImage: true,
-        bio: true,
         createdAt: true,
         
         // รวมข้อมูลเพิ่มเติม

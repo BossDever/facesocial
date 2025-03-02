@@ -225,80 +225,80 @@ export const getPostById = async (req: Request, res: Response) => {
 
 // ฟังก์ชันลบโพสต์
 export const deletePost = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-
-    // ตรวจสอบว่าโพสต์มีอยู่จริงหรือไม่
-    const post = await prisma.post.findUnique({
-      where: { id },
-      include: { media: true }
-    });
-
-    if (!post) {
-      return res.status(404).json({ message: 'ไม่พบโพสต์' });
-    }
-
-    // ตรวจสอบว่าเป็นเจ้าของโพสต์หรือไม่
-    if (post.userId !== userId) {
-      // ถ้าไม่ใช่เจ้าของ ตรวจสอบว่าเป็นผู้ดูแลระบบหรือไม่
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { isAdmin: true }
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+  
+      // ตรวจสอบว่าโพสต์มีอยู่จริงหรือไม่
+      const post = await prisma.post.findUnique({
+        where: { id },
+        include: { media: true }
       });
-
-      if (!user?.isAdmin) {
-        return res.status(403).json({ message: 'ไม่มีสิทธิ์ลบโพสต์นี้' });
+  
+      if (!post) {
+        return res.status(404).json({ message: 'ไม่พบโพสต์' });
       }
-    }
-
-    // ลบไฟล์ media
-    for (const media of post.media) {
-      const filePath = path.join(__dirname, '../../../', media.url);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
-
-    // ลบโพสต์และข้อมูลที่เกี่ยวข้อง
-    await prisma.$transaction([
-      // ลบ comments
-      prisma.comment.deleteMany({
-        where: { postId: id }
-      }),
-      // ลบ likes
-      prisma.like.deleteMany({
-        where: { postId: id }
-      }),
-      // ลบ faceTags ที่เกี่ยวข้องกับ media ของโพสต์
-      prisma.faceTag.deleteMany({
-        where: {
-          media: {
-            postId: id
-          }
+  
+      // ตรวจสอบว่าเป็นเจ้าของโพสต์หรือไม่
+      if (post.userId !== userId) {
+        // ถ้าไม่ใช่เจ้าของ ตรวจสอบว่าเป็นผู้ดูแลระบบหรือไม่
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { isAdmin: true }
+        });
+  
+        if (!user?.isAdmin) {
+          return res.status(403).json({ message: 'ไม่มีสิทธิ์ลบโพสต์นี้' });
         }
-      }),
-      // ลบ media
-      prisma.media.deleteMany({
-        where: { postId: id }
-      }),
-      // ลบโพสต์
-      prisma.post.delete({
-        where: { id }
-      })
-    ]);
-
-    return res.status(200).json({
-      message: 'ลบโพสต์สำเร็จ'
-    });
-  } catch (error: any) {
-    console.error('Delete post error:', error);
-    return res.status(500).json({
-      message: 'เกิดข้อผิดพลาดในการลบโพสต์',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
+      }
+  
+      // ลบไฟล์ media
+      for (const media of post.media) {
+        const filePath = path.join(__dirname, '../../../', media.url);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+  
+      // ลบโพสต์และข้อมูลที่เกี่ยวข้อง
+      await prisma.$transaction([
+        // ลบ comments
+        prisma.comment.deleteMany({
+          where: { postId: id }
+        }),
+        // ลบ likes
+        prisma.like.deleteMany({
+          where: { postId: id }
+        }),
+        // ลบ faceTags ที่เกี่ยวข้องกับ media ของโพสต์
+        prisma.faceTag.deleteMany({
+          where: {
+            media: {
+              postId: id
+            }
+          }
+        }),
+        // ลบ media
+        prisma.media.deleteMany({
+          where: { postId: id }
+        }),
+        // ลบโพสต์
+        prisma.post.delete({
+          where: { id }
+        })
+      ]);
+  
+      return res.status(200).json({
+        message: 'ลบโพสต์สำเร็จ'
+      });
+    } catch (error: any) {
+      console.error('Delete post error:', error);
+      return res.status(500).json({
+        message: 'เกิดข้อผิดพลาดในการลบโพสต์',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  };
 
 // ฟังก์ชันกดไลค์โพสต์
 export const likePost = async (req: Request, res: Response) => {

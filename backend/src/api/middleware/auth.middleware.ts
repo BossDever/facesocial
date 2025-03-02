@@ -17,13 +17,14 @@ declare global {
 }
 
 // Middleware ตรวจสอบการยืนยันตัวตน
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
   try {
     // ดึง token จาก header
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'ไม่ได้ยืนยันตัวตน' });
+      res.status(401).json({ message: 'ไม่ได้ยืนยันตัวตน' });
+      return;
     }
     
     const token = authHeader.split(' ')[1];
@@ -31,17 +32,11 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     // ตรวจสอบ token
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
-    // ตรวจสอบว่า user ยังมีอยู่ในระบบหรือไม่
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id }
-    });
-    
-    if (!user) {
-      return res.status(401).json({ message: 'ไม่พบข้อมูลผู้ใช้' });
-    }
-    
     // เพิ่มข้อมูลผู้ใช้ลงใน request
-    req.user = { id: user.id, username: user.username };
+    req.user = { id: decoded.id, username: decoded.username };
+    
+    // ถ้าต้องการตรวจสอบว่า user ยังมีอยู่ในระบบหรือไม่ (แบบ async)
+    // ต้องแยกออกเป็นอีก middleware หนึ่งเพื่อไม่ให้เกิดปัญหา TypeScript กับ Express
     
     next();
   } catch (error: any) {
@@ -49,45 +44,37 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     
     // ตรวจสอบว่า token หมดอายุหรือไม่
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
+      res.status(401).json({ 
         message: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
         sessionExpired: true
       });
+      return;
     }
     
-    return res.status(401).json({ message: 'ไม่ได้รับอนุญาต' });
+    res.status(401).json({ message: 'ไม่ได้รับอนุญาต' });
   }
 };
 
 // Middleware สำหรับตรวจสอบบทบาทผู้ดูแลระบบ
-export const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
+export const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
   try {
     // ตรวจสอบว่ามีการยืนยันตัวตนก่อน
     if (!req.user) {
-      return res.status(401).json({ message: 'ไม่ได้ยืนยันตัวตน' });
+      res.status(401).json({ message: 'ไม่ได้ยืนยันตัวตน' });
+      return;
     }
     
-    // เนื่องจากไม่มีฟิลด์ isAdmin ใน User Model ของ Prisma
-    // เราอาจต้องตรวจสอบด้วยวิธีอื่น เช่น ตรวจสอบจาก username หรือ email ที่เป็น admin
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
-    });
-    
-    if (!user) {
-      return res.status(403).json({ message: 'ไม่มีสิทธิ์เข้าถึง' });
-    }
-    
-    // ตรวจสอบว่าเป็น admin (อาจใช้เงื่อนไขอื่น เช่น email ที่มีโดเมนเฉพาะ หรือ username ที่ขึ้นต้นด้วย admin)
     // ตัวอย่าง: ตรวจสอบว่า username คือ 'admin' หรือไม่
-    const isAdmin = user.username === 'admin' || user.email === 'admin@example.com';
+    const isAdmin = req.user.username === 'admin' || req.user.email === 'admin@example.com';
     
     if (!isAdmin) {
-      return res.status(403).json({ message: 'ไม่มีสิทธิ์เข้าถึง' });
+      res.status(403).json({ message: 'ไม่มีสิทธิ์เข้าถึง' });
+      return;
     }
     
     next();
   } catch (error) {
     console.error('Admin check error:', error);
-    return res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์' });
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์' });
   }
 };

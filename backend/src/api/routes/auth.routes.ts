@@ -5,19 +5,37 @@ import { authenticate } from '../middleware/auth.middleware';
 
 const router = express.Router();
 
-// แยกฟังก์ชันที่จัดการ async error ออกมา
-const asyncHandler = (fn: Function) => (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
-};
-
 // เส้นทาง API สำหรับการยืนยันตัวตน
-router.post('/register', asyncHandler(authController.register));
-router.post('/login', asyncHandler(authController.login));
-router.post('/login-face', asyncHandler(authController.loginWithFace));
-router.post('/logout', authenticate, asyncHandler(authController.logout));
-router.get('/me', authenticate, asyncHandler(authController.getCurrentUser));
-router.patch('/profile', authenticate, asyncHandler(authController.updateUserProfile));
-router.post('/face-data/:userId', authenticate, asyncHandler(authController.storeFaceData));
-router.get('/status', asyncHandler(authController.getApiStatus));
+router.post('/register', (req, res, next) => {
+  authController.register(req, res).catch(next);
+});
+
+router.post('/login', (req, res, next) => {
+  authController.login(req, res).catch(next);
+});
+
+router.post('/login-face', (req, res, next) => {
+  authController.loginWithFace(req, res).catch(next);
+});
+
+router.post('/logout', authenticate, (req, res, next) => {
+  authController.logout(req, res).catch(next);
+});
+
+router.get('/me', authenticate, (req, res, next) => {
+  authController.getCurrentUser(req, res).catch(next);
+});
+
+router.patch('/profile', authenticate, (req, res, next) => {
+  authController.updateUserProfile(req, res).catch(next);
+});
+
+router.post('/face-data/:userId', authenticate, (req, res, next) => {
+  authController.storeFaceData(req, res).catch(next);
+});
+
+router.get('/status', (req, res, next) => {
+  authController.getApiStatus(req, res).catch(next);
+});
 
 export default router;

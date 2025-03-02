@@ -19,6 +19,8 @@ model User {
   firstName      String?
   lastName       String?
   profileImage   String?
+  bio            String?      // เพิ่มฟิลด์ bio
+  isAdmin        Boolean      @default(false) // เพิ่มฟิลด์ isAdmin
   isActive       Boolean      @default(true)
   emailVerified  Boolean      @default(false)
   createdAt      DateTime     @default(now())

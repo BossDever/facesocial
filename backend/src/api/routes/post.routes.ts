@@ -6,15 +6,37 @@ import { authenticate } from '../middleware/auth.middleware';
 const router = express.Router();
 
 // เส้นทาง API สำหรับจัดการโพสต์
-router.get('/', (req, res) => postController.getAllPosts(req, res));
-router.get('/:id', (req, res) => postController.getPostById(req, res));
-router.post('/', authenticate, (req, res) => postController.createPost(req, res));
-router.delete('/:id', authenticate, (req, res) => postController.deletePost(req, res));
+router.get('/', (req, res, next) => {
+  postController.getAllPosts(req, res).catch(next);
+});
+
+router.get('/:id', (req, res, next) => {
+  postController.getPostById(req, res).catch(next);
+});
+
+router.post('/', authenticate, (req, res, next) => {
+  postController.createPost(req, res).catch(next);
+});
+
+router.delete('/:id', authenticate, (req, res, next) => {
+  postController.deletePost(req, res).catch(next);
+});
 
 // เส้นทางสำหรับไลค์และความคิดเห็น
-router.post('/:id/like', authenticate, (req, res) => postController.likePost(req, res));
-router.delete('/:id/like', authenticate, (req, res) => postController.unlikePost(req, res));
-router.post('/:id/comment', authenticate, (req, res) => postController.commentPost(req, res));
-router.delete('/:id/comment/:commentId', authenticate, (req, res) => postController.deleteComment(req, res));
+router.post('/:id/like', authenticate, (req, res, next) => {
+  postController.likePost(req, res).catch(next);
+});
+
+router.delete('/:id/like', authenticate, (req, res, next) => {
+  postController.unlikePost(req, res).catch(next);
+});
+
+router.post('/:id/comment', authenticate, (req, res, next) => {
+  postController.commentPost(req, res).catch(next);
+});
+
+router.delete('/:id/comment/:commentId', authenticate, (req, res, next) => {
+  postController.deleteComment(req, res).catch(next);
+});
 
 export default router;
