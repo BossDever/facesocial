@@ -1,5 +1,4 @@
 // backend/src/api/routes/index.ts
-
 import express from 'express';
 import authRoutes from './auth.routes';
 import userRoutes from './user.routes';
