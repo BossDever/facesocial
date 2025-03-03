@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import * as blazeface from '@tensorflow-models/blazeface';
 import Button from '../ui/button';
+import faceNetService from '../../services/facenet.service';
 
 interface FileUploaderProps {
   onImageUploaded: (imageSrc: string, score: number) => void;
@@ -20,86 +20,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [model, setModel] = useState<blazeface.BlazeFaceModel | null>(null);
-  const [isModelLoading, setIsModelLoading] = useState(true);
   const [progress, setProgress] = useState<{ current: number, total: number, success: number, error: number, skip: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // โหลดโมเดล BlazeFace
-  useEffect(() => {
-    const loadModel = async () => {
-      try {
-        console.log("กำลังโหลดโมเดล BlazeFace สำหรับ FileUploader...");
-        
-        try {
-          // พยายามโหลดโมเดลจากโฟลเดอร์ public
-          const blazeFaceModel = await blazeface.load({
-            modelUrl: '/models/blazeface/model.json'
-          });
-          console.log("โหลดโมเดล BlazeFace จากโฟลเดอร์ public สำเร็จ");
-          setModel(blazeFaceModel);
-          setIsModelLoading(false);
-        } catch (localError) {
-          console.warn("ไม่พบโมเดลในเครื่อง หรือโมเดลมีปัญหา, ใช้ mock model แทน", localError);
-          
-          // สร้าง mock model เพื่อทำงานแทน BlazeFace
-          const mockModel = {
-            estimateFaces: async (img) => {
-              // จำลองการตรวจพบใบหน้า
-              // ใช้ข้อมูลขนาดรูปภาพเพื่อจำลองการตรวจพบที่ดีขึ้น
-              let imgWidth = 300;
-              let imgHeight = 300;
-              
-              // ถ้า img เป็น Element ที่มีขนาด
-              if (img instanceof HTMLImageElement || img instanceof HTMLVideoElement || 
-                  img instanceof HTMLCanvasElement) {
-                imgWidth = img.width || 300;
-                imgHeight = img.height || 300;
-              } else if (img instanceof ImageData) {
-                imgWidth = img.width;
-                imgHeight = img.height;
-              }
-              
-              // จำลองการพบใบหน้า 1 ใบหน้าตรงกลางรูป
-              const faceWidth = imgWidth * 0.4;  // ใบหน้ากว้างประมาณ 40% ของความกว้างรูป
-              const faceHeight = imgHeight * 0.4;
-              
-              const centerX = imgWidth / 2;
-              const centerY = imgHeight / 2;
-              
-              const topLeft = [centerX - faceWidth/2, centerY - faceHeight/2];
-              const bottomRight = [centerX + faceWidth/2, centerY + faceHeight/2];
-              
-              return [{
-                topLeft: topLeft,
-                bottomRight: bottomRight,
-                landmarks: [
-                  [centerX - faceWidth*0.2, centerY - faceHeight*0.1], // ตาซ้าย
-                  [centerX + faceWidth*0.2, centerY - faceHeight*0.1], // ตาขวา
-                  [centerX, centerY + faceHeight*0.1], // จมูก
-                  [centerX - faceWidth*0.15, centerY + faceHeight*0.2], // มุมซ้ายของปาก
-                  [centerX + faceWidth*0.15, centerY + faceHeight*0.2]  // มุมขวาของปาก
-                ],
-                probability: [0.95] // ความมั่นใจในการตรวจพบสูง
-              }];
-            }
-          };
-          
-          // ตั้งค่า mock model
-          setModel(mockModel);
-          setIsModelLoading(false);
-          console.log("ใช้ mock model สำหรับการตรวจจับใบหน้าแทน BlazeFace ที่มีปัญหา");
-        }
-        
-      } catch (error) {
-        console.error('ไม่สามารถโหลดโมเดลตรวจจับใบหน้าได้:', error);
-        setError('ไม่สามารถโหลดโมเดลตรวจจับใบหน้าได้ กรุณารีเฟรชหน้าเว็บ');
-        setIsModelLoading(false);
-      }
-    };
-    
-    loadModel();
-  }, []);
   
   // ตรวจสอบว่ารูปภาพซ้ำกับที่มีอยู่แล้วหรือไม่
   const isDuplicateImage = (newImageSrc: string): boolean => {
@@ -114,10 +36,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   
   // ประมวลผลรูปภาพ
   const processImage = async (file: File): Promise<{ success: boolean; error?: string; imageSrc?: string; score?: number }> => {
-    if (!model) {
-      return { success: false, error: 'โมเดลตรวจจับใบหน้ายังไม่พร้อมใช้งาน' };
-    }
-    
     try {
       // อ่านไฟล์เป็น data URL
       return new Promise((resolve) => {
@@ -132,43 +50,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             return;
           }
           
-          const img = new Image();
-          img.src = imageSrc;
-          
-          img.onload = async () => {
-            try {
-              // ตรวจจับใบหน้าด้วย BlazeFace
-              const predictions = await model.estimateFaces(img, false);
-              
-              if (predictions.length === 0) {
-                resolve({ success: false, error: 'ไม่พบใบหน้าในรูปภาพ' });
-                return;
-              }
-              
-              // ตรวจสอบว่ามีใบหน้ามากกว่า 1 ใบหรือไม่
-              if (predictions.length > 1) {
-                resolve({ success: false, error: 'พบใบหน้ามากกว่า 1 ใบในรูปภาพ รองรับเฉพาะรูปที่มีใบหน้าเดียวเท่านั้น' });
-                return;
-              }
-              
-              // คำนวณคะแนนความมั่นใจ (0-100)
-              const score = predictions[0].probability[0] * 100;
-              
-              if (score < 60) {
-                resolve({ success: false, error: `คุณภาพใบหน้าต่ำเกินไป (${Math.round(score)}%)` });
-                return;
-              }
-              
-              resolve({ success: true, imageSrc, score: Math.round(score) });
-            } catch (error) {
-              console.error('ไม่สามารถตรวจสอบรูปภาพได้:', error);
-              resolve({ success: false, error: 'เกิดข้อผิดพลาดในการตรวจสอบรูปภาพ' });
+          try {
+            // ส่งรูปไปประมวลผลที่ server ผ่าน API
+            const result = await faceNetService.detectFaces(imageSrc);
+            
+            if (!result.faceDetected) {
+              resolve({ success: false, error: 'ไม่พบใบหน้าในรูปภาพ' });
+              return;
             }
-          };
-          
-          img.onerror = () => {
-            resolve({ success: false, error: 'ไม่สามารถโหลดรูปภาพได้' });
-          };
+            
+            // ตรวจสอบว่ามีใบหน้ามากกว่า 1 ใบหรือไม่
+            if (result.faceCount > 1) {
+              resolve({ success: false, error: 'พบใบหน้ามากกว่า 1 ใบในรูปภาพ รองรับเฉพาะรูปที่มีใบหน้าเดียวเท่านั้น' });
+              return;
+            }
+            
+            // คำนวณคะแนนความมั่นใจ (0-100)
+            const score = result.score;
+            
+            if (score < 60) {
+              resolve({ success: false, error: `คุณภาพใบหน้าต่ำเกินไป (${Math.round(score)}%)` });
+              return;
+            }
+            
+            resolve({ success: true, imageSrc, score: Math.round(score) });
+          } catch (error) {
+            console.error('ไม่สามารถตรวจสอบรูปภาพได้:', error);
+            resolve({ success: false, error: 'เกิดข้อผิดพลาดในการตรวจสอบรูปภาพ' });
+          }
         };
         
         reader.onerror = () => {
@@ -345,11 +254,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           <Button
             onClick={handleButtonClick}
             variant="outline"
-            disabled={isModelLoading || isAnalyzing}
+            disabled={isAnalyzing}
             className="mb-2"
           >
-            {isModelLoading ? 'กำลังโหลดโมเดล...' : 
-             isAnalyzing ? 'กำลังวิเคราะห์...' : 'เลือกรูปภาพ (เลือกได้หลายรูป)'}
+            {isAnalyzing ? 'กำลังวิเคราะห์...' : 'เลือกรูปภาพ (เลือกได้หลายรูป)'}
           </Button>
         )}
         

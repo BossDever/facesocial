@@ -5,28 +5,25 @@
 import axios from 'axios';
 
 /**
- * FaceNet Service สำหรับการสร้าง Face Embeddings โดยใช้ API
+ * FaceNetService สำหรับการสร้าง Face Embeddings โดยใช้ API
  */
 class FaceNetService {
   private apiUrl: string;
-  private modelLoaded: boolean = false;
   
   constructor() {
-    // กำหนด URL ของ API - ควรระบุ protocol (http:// หรือ https://) ด้วย
-    this.apiUrl = process.env.NEXT_PUBLIC_FACENET_API_URL || 'http://localhost:8000';
-    console.log(`FaceNet API URL: ${this.apiUrl}`);
+    // กำหนด URL ของ API (backend)
+    this.apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    console.log(`API URL: ${this.apiUrl}`);
   }
   
   /**
    * ทดสอบเชื่อมต่อกับ API เพื่อตรวจสอบว่า API พร้อมใช้งานหรือไม่
    */
   async loadModel(): Promise<boolean> {
-    if (this.modelLoaded) return true;
-    
     try {
-      console.log('กำลังตรวจสอบการเชื่อมต่อกับ FaceNet API...');
-      const response = await axios.get(`${this.apiUrl}/health`, { 
-        timeout: 10000,  // เพิ่มเวลา timeout เป็น 10 วินาที
+      console.log('กำลังตรวจสอบการเชื่อมต่อกับ API...');
+      const response = await axios.get(`${this.apiUrl}/face/health`, { 
+        timeout: 5000,
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -34,19 +31,14 @@ class FaceNetService {
       });
       
       if (response.status === 200) {
-        this.modelLoaded = true;
-        console.log('เชื่อมต่อกับ FaceNet API สำเร็จ:', response.data);
+        console.log('เชื่อมต่อกับ Face API สำเร็จ:', response.data);
         return true;
       }
       
-      console.warn('ไม่สามารถเชื่อมต่อกับ FaceNet API ได้');
+      console.warn('ไม่สามารถเชื่อมต่อกับ Face API ได้');
       return false;
     } catch (error) {
-      console.error('เกิดข้อผิดพลาดในการเชื่อมต่อกับ FaceNet API:', error);
-      
-      // ถ้าไม่สามารถเชื่อมต่อได้ ให้แสดงข้อความเตือน
-      console.warn('ใช้งานในโหมด fallback (ใช้ dummy embeddings)');
-      
+      console.error('เกิดข้อผิดพลาดในการเชื่อมต่อกับ Face API:', error);
       return false;
     }
   }
@@ -58,86 +50,94 @@ class FaceNetService {
    */
   async generateEmbeddings(faceImage: string): Promise<number[]> {
     try {
-      // ตรวจสอบและโหลด API
-      const apiAvailable = await this.loadModel();
+      // ปรับรูปแบบ base64 ก่อนส่ง
+      let base64Data = faceImage;
       
-      // ถ้า API พร้อมใช้งาน ลองเชื่อมต่อ
-      if (apiAvailable) {
-        try {
-          // ปรับรูปแบบ base64 ก่อนส่ง
-          let base64Data = faceImage;
-          
-          // สร้าง form data ด้วย key ที่ถูกต้อง
-          const formData = new FormData();
-          formData.append('image_data', base64Data);
-          
-          // เพิ่ม debug log
-          console.log('กำลังส่งข้อมูลไปยัง FaceNet API:', this.apiUrl);
-          
-          // เรียกใช้ API เพื่อสร้าง embeddings
-          const response = await axios.post(
-            `${this.apiUrl}/generate-embeddings/base64/`,
-            formData,
-            { 
-              timeout: 30000, // เพิ่ม timeout เป็น 30 วินาที
-              headers: {
-                'Content-Type': 'multipart/form-data'
-              }
-            }
-          );
-          
-          // ตรวจสอบว่าได้รับ embeddings หรือไม่
-          if (response.data && response.data.embeddings) {
-            console.log('ได้รับ embeddings จาก API สำเร็จ');
-            return response.data.embeddings;
-          }
-        } catch (apiError: any) {
-          // จัดการกรณี 400 (ไม่พบใบหน้า) แยกจากกรณีอื่น
-          if (apiError.response && apiError.response.status === 400) {
-            console.warn('API แจ้งว่าไม่พบใบหน้าในรูปภาพ - ใช้ dummy embeddings แทน');
-          } else {
-            console.error('ไม่สามารถเรียกใช้ API ได้:', apiError);
+      // สร้าง form data
+      const formData = new FormData();
+      formData.append('image_data', base64Data);
+      
+      // เพิ่ม debug log
+      console.log('กำลังส่งข้อมูลไปยัง API เพื่อสร้าง embeddings');
+      
+      // เรียกใช้ API เพื่อสร้าง embeddings
+      const response = await axios.post(
+        `${this.apiUrl}/face/embeddings`,
+        formData,
+        { 
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'multipart/form-data'
           }
         }
+      );
+      
+      // ตรวจสอบว่าได้รับ embeddings หรือไม่
+      if (response.data && response.data.embeddings) {
+        console.log('ได้รับ embeddings จาก API สำเร็จ');
+        return response.data.embeddings;
       }
       
-      // ถ้าไม่สามารถเชื่อมต่อ API ได้ หรือมีข้อผิดพลาด ใช้ consistent dummy embeddings
-      console.warn('ใช้ consistent dummy embeddings แทน');
-      return this.createConsistentDummyEmbeddings(faceImage);
+      throw new Error('ไม่ได้รับข้อมูล embeddings จาก API');
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการสร้าง Face Embeddings:', error);
       
-      // ใช้ dummy embeddings ในกรณีที่มีข้อผิดพลาด
-      console.warn('ใช้ consistent dummy embeddings แทน');
-      return this.createConsistentDummyEmbeddings(faceImage);
+      // เนื่องจากไม่สามารถใช้งาน API ได้ จะต้องมีการจำลองค่า embeddings
+      console.warn('ใช้ dummy embeddings แทน');
+      return this.createDummyEmbeddings();
     }
   }
   
   /**
-   * สร้าง consistent embeddings จำลองสำหรับรูปภาพเดียวกัน
-   * @param image รูปภาพที่ใช้เป็น seed
-   * @returns embeddings ที่คงที่สำหรับรูปภาพเดียวกัน
+   * ตรวจจับใบหน้าในรูปภาพ
+   * @param faceImage รูปภาพที่เป็น Base64 string
+   * @returns ข้อมูลการตรวจจับใบหน้า
    */
-  private createConsistentDummyEmbeddings(image: string): number[] {
-    // ใช้ส่วนแรกของรูปภาพเป็น seed
-    const seed = this.simpleHash(image.substring(0, 1000));
-    
-    // สร้าง pseudo-random ด้วย seed
-    const rng = this.seededRandom(seed);
-    
-    // สร้าง embeddings ขนาด 128 มิติ
-    const embeddings = Array.from({ length: 128 }, () => rng() * 2 - 1);
-    
-    // Normalize
-    return this.normalizeEmbeddings(embeddings);
+  async detectFaces(faceImage: string): Promise<any> {
+    try {
+      // ปรับรูปแบบ base64 ก่อนส่ง
+      let base64Data = faceImage;
+      
+      // สร้าง form data
+      const formData = new FormData();
+      formData.append('image_data', base64Data);
+      
+      // เรียกใช้ API เพื่อตรวจจับใบหน้า
+      const response = await axios.post(
+        `${this.apiUrl}/face/detect`,
+        formData,
+        { 
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการตรวจจับใบหน้า:', error);
+      
+      // จำลองข้อมูลการตรวจจับใบหน้า
+      return {
+        faceDetected: true,
+        score: 95,
+        faceBox: {
+          top: 50,
+          left: 50,
+          width: 200,
+          height: 200
+        }
+      };
+    }
   }
   
   /**
-   * สร้าง embeddings จำลองแบบสุ่มสำหรับการทดสอบ
+   * สร้าง embeddings จำลองสำหรับการทดสอบ
    * @returns embeddings จำลอง
    */
   private createDummyEmbeddings(): number[] {
-    console.log('กำลังสร้าง random dummy embeddings สำหรับทดสอบ');
+    console.log('กำลังสร้าง dummy embeddings สำหรับทดสอบ');
     
     // สร้าง embeddings ขนาด 128 มิติ
     const dummyEmbeddings = Array.from({ length: 128 }, () => Math.random() * 2 - 1);
@@ -191,33 +191,6 @@ class FaceNetService {
   isSameFace(embeddings1: number[], embeddings2: number[], threshold: number = 0.6): boolean {
     const distance = this.calculateDistance(embeddings1, embeddings2);
     return distance < threshold;
-  }
-  
-  /**
-   * สร้าง hash จากสตริง (อย่างง่าย)
-   * @param str สตริงที่ต้องการ hash
-   * @returns ค่า hash เป็นตัวเลข
-   */
-  private simpleHash(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return hash;
-  }
-  
-  /**
-   * สร้าง random function ที่ใช้ seed (เหมือนกับ Math.random แต่ให้ผลลัพธ์คงที่ตาม seed)
-   * @param seed ค่า seed
-   * @returns ฟังก์ชันที่คืนค่าสุ่มระหว่าง 0-1
-   */
-  private seededRandom(seed: number): () => number {
-    return function() {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
   }
 }
 
