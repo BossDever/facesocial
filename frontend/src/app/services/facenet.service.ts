@@ -1,3 +1,5 @@
+// frontend/src/app/services/facenet.service.ts
+
 'use client';
 
 import axios from 'axios';
@@ -10,7 +12,7 @@ class FaceNetService {
   private modelLoaded: boolean = false;
   
   constructor() {
-    // กำหนด URL ของ API
+    // กำหนด URL ของ API - ควรระบุ protocol (http:// หรือ https://) ด้วย
     this.apiUrl = process.env.NEXT_PUBLIC_FACENET_API_URL || 'http://localhost:8000';
     console.log(`FaceNet API URL: ${this.apiUrl}`);
   }
@@ -23,7 +25,13 @@ class FaceNetService {
     
     try {
       console.log('กำลังตรวจสอบการเชื่อมต่อกับ FaceNet API...');
-      const response = await axios.get(`${this.apiUrl}/health`, { timeout: 5000 });
+      const response = await axios.get(`${this.apiUrl}/health`, { 
+        timeout: 10000,  // เพิ่มเวลา timeout เป็น 10 วินาที
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       
       if (response.status === 200) {
         this.modelLoaded = true;
@@ -59,20 +67,23 @@ class FaceNetService {
           // ปรับรูปแบบ base64 ก่อนส่ง
           let base64Data = faceImage;
           
-          // ถ้ารูปแบบเป็น data URL ให้ตัดส่วนหัวออก
-          if (base64Data.includes(';base64,')) {
-            base64Data = base64Data.split(';base64,')[1];
-          }
-          
-          // สร้าง formData
+          // สร้าง form data ด้วย key ที่ถูกต้อง
           const formData = new FormData();
           formData.append('image_data', base64Data);
+          
+          // เพิ่ม debug log
+          console.log('กำลังส่งข้อมูลไปยัง FaceNet API:', this.apiUrl);
           
           // เรียกใช้ API เพื่อสร้าง embeddings
           const response = await axios.post(
             `${this.apiUrl}/generate-embeddings/base64/`,
             formData,
-            { timeout: 10000 } // timeout 10 วินาที
+            { 
+              timeout: 30000, // เพิ่ม timeout เป็น 30 วินาที
+              headers: {
+                'Content-Type': 'multipart/form-data'
+              }
+            }
           );
           
           // ตรวจสอบว่าได้รับ embeddings หรือไม่
