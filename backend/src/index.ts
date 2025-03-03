@@ -23,7 +23,7 @@ app.use(cors({
   origin: [...(process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000']), 
           /\.ngrok\.io$/, /\.ngrok-free\.app$/],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma'],
   credentials: true
 }));
 

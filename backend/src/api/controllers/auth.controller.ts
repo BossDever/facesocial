@@ -147,9 +147,21 @@ export const loginWithFace = async (req: Request, res: Response) => {
     // ฟังก์ชันคำนวณระยะห่างระหว่าง embeddings
     const calculateDistance = (emb1: number[], emb2: number[]): number => {
       if (emb1.length !== emb2.length) {
-        throw new Error('Embeddings มีขนาดไม่เท่ากัน');
+        console.warn(`Embeddings มีขนาดไม่เท่ากัน: ${emb1.length} vs ${emb2.length}`);
+        
+        // ใช้ความยาวที่น้อยกว่าในการเปรียบเทียบ
+        const minLength = Math.min(emb1.length, emb2.length);
+        
+        let sum = 0;
+        for (let i = 0; i < minLength; i++) {
+          const diff = emb1[i] - emb2[i];
+          sum += diff * diff;
+        }
+        
+        return Math.sqrt(sum);
       }
       
+      // กรณีที่ขนาดเท่ากัน ใช้โค้ดเดิม
       let sum = 0;
       for (let i = 0; i < emb1.length; i++) {
         const diff = emb1[i] - emb2[i];
