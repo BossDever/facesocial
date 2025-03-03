@@ -1,3 +1,4 @@
+# facenet-api/main.py
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,59 +15,31 @@ import traceback
 
 app = FastAPI(title="FaceNet API", description="API สำหรับสร้าง Face Embeddings")
 
-# เพิ่ม CORS middleware
+# เพิ่ม CORS middleware - แก้ไขเพื่อรองรับ Ngrok
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ในการใช้งานจริงควรระบุเฉพาะโดเมนที่อนุญาตให้เรียกใช้
+    allow_origins=["*"],  # อนุญาตทุกโดเมน (สำหรับการทดสอบเท่านั้น)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# แสดงข้อมูลเกี่ยวกับ working directory และ environment
-print(f"Current working directory: {os.getcwd()}")
-print(f"Python version: {sys.version}")
-print(f"Environment variables: {dict(os.environ)}")
+# แก้ไขการกำหนด path ของโมเดล
+MODEL_PATH = os.environ.get('MODEL_PATH') 
 
-# แก้ไขการกำหนด path ของโมเดล (ทำให้รองรับทั้ง Windows และ Linux)
-MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "facenet")
-MODEL_PATH = os.environ.get('MODEL_PATH')  # ใช้ค่าจาก environment variable ถ้ามี
-
-# ถ้าไม่มี environment variable ให้ลองหลายเส้นทาง
+# ถ้าไม่มี environment variable ให้ใช้ path แบบ absolute
 if not MODEL_PATH:
-    possible_paths = [
-        os.path.join(MODEL_DIR, "20180402-114759.pb"),
-        os.path.join(MODEL_DIR, "20180402-114759", "20180402-114759.pb"),
-        os.path.join(MODEL_DIR, "20180408-102900", "20180408-102900.pb")
-    ]
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            MODEL_PATH = path
-            print(f"พบโมเดลที่: {MODEL_PATH}")
-            break
-else:
-    print(f"ใช้ MODEL_PATH จาก environment variable: {MODEL_PATH}")
+    # เปลี่ยนเป็น path จริงของคุณ
+    MODEL_PATH = "D:/โปรเจคจบ/Web/facesocial/models/facenet/20180402-114759/20180402-114759.pb"
+    print(f"ใช้ MODEL_PATH แบบ hardcode: {MODEL_PATH}")
 
-# แสดงข้อมูลการค้นหาโมเดล
 print(f"กำลังค้นหาโมเดลที่: {MODEL_PATH}")
 print(f"ไฟล์มีอยู่จริง: {os.path.exists(MODEL_PATH) if MODEL_PATH else False}")
-print(f"โฟลเดอร์โมเดลมีอยู่จริง: {os.path.exists(MODEL_DIR)}")
-
-if os.path.exists(MODEL_DIR):
-    print(f"เนื้อหาของโฟลเดอร์โมเดล: {os.listdir(MODEL_DIR)}")
-    # ลองค้นหาไฟล์ .pb ใน MODEL_DIR
-    for root, dirs, files in os.walk(MODEL_DIR):
-        for file in files:
-            if file.endswith('.pb'):
-                print(f"พบไฟล์ .pb ที่: {os.path.join(root, file)}")
 
 # ตรวจสอบว่ามีโมเดลหรือไม่
 if not MODEL_PATH or not os.path.exists(MODEL_PATH):
     print(f"ไม่พบไฟล์โมเดล: {MODEL_PATH}")
     print("กำลังใช้โหมด Dummy API แทน...")
-    
-    # โหมด Dummy API (ไม่ต้องใช้โมเดล)
     use_dummy_mode = True
 else:
     print(f"พบโมเดลที่: {MODEL_PATH}")
