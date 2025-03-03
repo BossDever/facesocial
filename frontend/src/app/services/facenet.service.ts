@@ -29,7 +29,7 @@ class FaceNetService {
     
     try {
       console.log('กำลังตรวจสอบการเชื่อมต่อกับ API...');
-      const response = await axios.get(`${this.apiUrl}/face/health`, { 
+      const healthResponse = await axios.get(`${this.apiUrl}/face/health`, { 
         timeout: 5000,
         headers: {
           'Cache-Control': 'no-cache',
@@ -37,8 +37,8 @@ class FaceNetService {
         }
       });
       
-      if (response.status === 200) {
-        console.log('เชื่อมต่อกับ Face API สำเร็จ:', response.data);
+      if (healthResponse.status === 200) {
+        console.log('เชื่อมต่อกับ Face API สำเร็จ:', healthResponse.data);
         return true;
       }
       
@@ -69,29 +69,30 @@ class FaceNetService {
       // ปรับรูปแบบ base64 ก่อนส่ง
       let base64Data = faceImage;
       
-      // สร้าง form data
-      const formData = new FormData();
-      formData.append('image_data', base64Data);
+      // สร้าง JSON data แทน FormData
+      const jsonData = {
+        image_data: base64Data
+      };
       
       // เพิ่ม debug log
       console.log('กำลังส่งข้อมูลไปยัง API เพื่อสร้าง embeddings');
       
       // เรียกใช้ API เพื่อสร้าง embeddings
-      const response = await axios.post(
+      const embeddingsResponse = await axios.post(
         `${this.apiUrl}/face/embeddings`,
-        formData,
+        jsonData,
         { 
           timeout: 10000,
           headers: {
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'application/json'
           }
         }
       );
       
       // ตรวจสอบว่าได้รับ embeddings หรือไม่
-      if (response.data && response.data.embeddings) {
+      if (embeddingsResponse.data && embeddingsResponse.data.embeddings) {
         console.log('ได้รับ embeddings จาก API สำเร็จ');
-        return response.data.embeddings;
+        return embeddingsResponse.data.embeddings;
       }
       
       console.warn('ไม่ได้รับข้อมูล embeddings จาก API - ใช้ข้อมูลจำลองแทน');
@@ -121,23 +122,24 @@ class FaceNetService {
       // ปรับรูปแบบ base64 ก่อนส่ง
       let base64Data = faceImage;
       
-      // สร้าง form data
-      const formData = new FormData();
-      formData.append('image_data', base64Data);
+      // สร้าง JSON data แทน FormData
+      const jsonData = {
+        image_data: base64Data
+      };
       
       // เรียกใช้ API เพื่อตรวจจับใบหน้า
-      const response = await axios.post(
+      const detectResponse = await axios.post(
         `${this.apiUrl}/face/detect`,
-        formData,
+        jsonData,
         { 
           timeout: 10000,
           headers: {
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'application/json'
           }
         }
       );
       
-      return response.data;
+      return detectResponse.data;
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการตรวจจับใบหน้า:', error);
       
@@ -174,18 +176,21 @@ class FaceNetService {
     
     try {
       // เรียกใช้ API เพื่อเปรียบเทียบใบหน้า
-      const response = await axios.post(
+      const compareResponse = await axios.post(
         `${this.apiUrl}/face/compare`,
         {
           image1,
           image2
         },
         { 
-          timeout: 10000
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
         }
       );
       
-      return response.data;
+      return compareResponse.data;
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการเปรียบเทียบใบหน้า:', error);
       
