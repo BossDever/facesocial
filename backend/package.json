@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
-    "@tensorflow/tfjs-node": "^4.22.0",
+    "axios": "^1.8.1",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -23,9 +23,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "multer": "^1.4.5-lts.1",
-    "canvas": "^2.11.2",
-    "face-api.js": "^0.22.2"
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

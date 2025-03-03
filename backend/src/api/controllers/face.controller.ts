@@ -1,16 +1,12 @@
 // backend/src/api/controllers/face.controller.ts
 
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import * as tf from '@tensorflow/tfjs-node';
+import axios from 'axios';
 import path from 'path';
 import fs from 'fs';
 
-const prisma = new PrismaClient();
-
-// โหลดโมเดล FaceNet
-let facenetModel: tf.GraphModel | null = null;
-const MODEL_PATH = process.env.FACENET_MODEL_PATH || 'file://./models/facenet/20180402-114759/20180402-114759.pb';
+// URL ของ FaceNet API
+const FACENET_API_URL = process.env.FACENET_API_URL || 'http://localhost:8000';
 
 // ตำแหน่งสำหรับเก็บรูปภาพชั่วคราว
 const TEMP_DIR = path.join(__dirname, '../../../temp');
@@ -18,84 +14,15 @@ if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
-// โหลดโมเดล FaceNet
-async function loadFaceNetModel() {
-  try {
-    console.log('กำลังโหลดโมเดล FaceNet...');
-    facenetModel = await tf.loadGraphModel(MODEL_PATH);
-    console.log('โหลดโมเดล FaceNet สำเร็จ');
-    
-    // ทดสอบโมเดล
-    const dummyInput = tf.zeros([1, 160, 160, 3]);
-    const result = facenetModel.execute(dummyInput) as tf.Tensor;
-    result.dispose();
-    dummyInput.dispose();
-    
-    console.log('โมเดล FaceNet พร้อมใช้งาน');
-    return true;
-  } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการโหลดโมเดล FaceNet:', error);
-    return false;
-  }
-}
-
-// เตรียมรูปภาพสำหรับโมเดล FaceNet
-function preprocessImage(imageBuffer: Buffer): tf.Tensor {
-  // อ่านรูปภาพจาก buffer
-  const image = tf.node.decodeImage(imageBuffer, 3);
-  
-  // ปรับขนาดรูปภาพเป็น 160x160
-  const resizedImage = tf.image.resizeBilinear(image, [160, 160]);
-  
-  // Normalize รูปภาพ
-  const normalized = resizedImage.toFloat().div(tf.scalar(255));
-  
-  // คืนค่า tensor ที่ปรับแต่งแล้ว
-  return normalized;
-}
-
-// สร้าง face embeddings
-async function generateEmbeddings(imageBuffer: Buffer): Promise<number[]> {
-  // โหลดโมเดลถ้ายังไม่ได้โหลด
-  if (!facenetModel) {
-    await loadFaceNetModel();
-  }
-  
-  // ตรวจสอบว่าโหลดโมเดลสำเร็จหรือไม่
-  if (!facenetModel) {
-    throw new Error('ไม่สามารถโหลดโมเดล FaceNet ได้');
-  }
-  
-  // ประมวลผลรูปภาพ
-  const processedImage = preprocessImage(imageBuffer);
-  
-  // เพิ่มมิติ batch
-  const batchedImage = processedImage.expandDims(0);
-  
-  // สร้าง embeddings
-  const embeddings = facenetModel.execute(batchedImage) as tf.Tensor;
-  
-  // แปลง tensor เป็น array
-  const embeddingsArray = await embeddings.data();
-  
-  // ทำความสะอาด memory
-  processedImage.dispose();
-  batchedImage.dispose();
-  embeddings.dispose();
-  
-  // คืนค่า embeddings เป็น array
-  return Array.from(embeddingsArray);
-}
-
 // ตรวจสอบความพร้อมของ API
 export const checkHealth = async (req: Request, res: Response) => {
   try {
-    // ตรวจสอบการโหลดโมเดล
-    const modelReady = facenetModel !== null || await loadFaceNetModel();
+    // ส่งคำขอไปยัง FaceNet API
+    const response = await axios.get(`${FACENET_API_URL}/health`, { timeout: 5000 });
     
     return res.status(200).json({
-      status: modelReady ? 'ready' : 'not_ready',
-      message: modelReady ? 'Face API พร้อมใช้งาน' : 'กำลังโหลดโมเดล FaceNet',
+      status: response.data.status || 'ready',
+      message: response.data.message || 'Face API พร้อมใช้งาน',
       timestamp: new Date()
     });
   } catch (error: any) {
@@ -118,16 +45,23 @@ export const createEmbeddings = async (req: Request, res: Response) => {
       });
     }
     
-    // แปลง base64 เป็น buffer
-    const base64Data = req.body.image_data.replace(/^data:image\/\w+;base64,/, '');
-    const imageBuffer = Buffer.from(base64Data, 'base64');
+    // ส่งข้อมูลไปยัง FaceNet API
+    const formData = new FormData();
+    formData.append('image_data', req.body.image_data);
     
-    // สร้าง embeddings
-    const embeddings = await generateEmbeddings(imageBuffer);
+    const response = await axios.post(`${FACENET_API_URL}/generate-embeddings/base64/`, 
+      formData,
+      { 
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    );
     
     return res.status(200).json({
       message: 'สร้าง face embeddings สำเร็จ',
-      embeddings
+      embeddings: response.data.embeddings
     });
   } catch (error: any) {
     console.error('Create face embeddings error:', error);
@@ -148,33 +82,21 @@ export const detectFaces = async (req: Request, res: Response) => {
       });
     }
     
-    // แปลง base64 เป็น buffer
-    const base64Data = req.body.image_data.replace(/^data:image\/\w+;base64,/, '');
-    const imageBuffer = Buffer.from(base64Data, 'base64');
+    // ส่งข้อมูลไปยัง FaceNet API
+    const formData = new FormData();
+    formData.append('image_data', req.body.image_data);
     
-    // บันทึกรูปภาพลงไฟล์ชั่วคราว (ถ้าต้องการ)
-    const tempFilePath = path.join(TEMP_DIR, `temp_${Date.now()}.jpg`);
-    fs.writeFileSync(tempFilePath, imageBuffer);
-    
-    // TODO: ใช้ BlazeFace หรือ MTCNN เพื่อตรวจจับใบหน้า
-    
-    // จำลองผลลัพธ์การตรวจจับใบหน้า
-    const detectionResult = {
-      faceDetected: true,
-      faceCount: 1,
-      score: 95,
-      faceBox: {
-        top: 50,
-        left: 50,
-        width: 200,
-        height: 200
+    const response = await axios.post(`${FACENET_API_URL}/detect`, 
+      formData,
+      { 
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       }
-    };
+    );
     
-    // ลบไฟล์ชั่วคราว
-    fs.unlinkSync(tempFilePath);
-    
-    return res.status(200).json(detectionResult);
+    return res.status(200).json(response.data);
   } catch (error: any) {
     console.error('Detect faces error:', error);
     return res.status(500).json({
@@ -194,35 +116,21 @@ export const compareFaces = async (req: Request, res: Response) => {
       });
     }
     
-    // แปลง base64 เป็น buffer
-    const base64Data1 = req.body.image1.replace(/^data:image\/\w+;base64,/, '');
-    const base64Data2 = req.body.image2.replace(/^data:image\/\w+;base64,/, '');
-    const imageBuffer1 = Buffer.from(base64Data1, 'base64');
-    const imageBuffer2 = Buffer.from(base64Data2, 'base64');
+    // ส่งข้อมูลไปยัง FaceNet API
+    const response = await axios.post(`${FACENET_API_URL}/compare`, 
+      {
+        image1: req.body.image1,
+        image2: req.body.image2
+      },
+      { 
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
     
-    // สร้าง embeddings สำหรับทั้งสองรูป
-    const embeddings1 = await generateEmbeddings(imageBuffer1);
-    const embeddings2 = await generateEmbeddings(imageBuffer2);
-    
-    // คำนวณระยะห่างระหว่าง embeddings
-    let sumSquaredDiff = 0;
-    for (let i = 0; i < embeddings1.length; i++) {
-      const diff = embeddings1[i] - embeddings2[i];
-      sumSquaredDiff += diff * diff;
-    }
-    const distance = Math.sqrt(sumSquaredDiff);
-    
-    // ค่า threshold สำหรับการเปรียบเทียบ
-    const threshold = 0.6;
-    const isSamePerson = distance < threshold;
-    
-    return res.status(200).json({
-      message: 'เปรียบเทียบใบหน้าสำเร็จ',
-      distance,
-      threshold,
-      isSamePerson,
-      confidence: 1 - distance
-    });
+    return res.status(200).json(response.data);
   } catch (error: any) {
     console.error('Compare faces error:', error);
     return res.status(500).json({
@@ -231,6 +139,3 @@ export const compareFaces = async (req: Request, res: Response) => {
     });
   }
 };
-
-// โหลดโมเดลโดยอัตโนมัติเมื่อเริ่มต้น server
-loadFaceNetModel();
