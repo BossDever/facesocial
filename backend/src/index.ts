@@ -1,5 +1,4 @@
-// backend/src/index.ts - ไฟล์หลักของ Backend API
-
+// backend/src/index.ts
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -20,28 +19,20 @@ const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+  // แก้ไข origin เพื่อรองรับ Ngrok
+  origin: [...(process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000']), 
+          /\.ngrok\.io$/, /\.ngrok-free\.app$/],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
-app.use(helmet());
+
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// ตรวจสอบการเชื่อมต่อฐานข้อมูล
-async function checkDatabaseConnection() {
-  try {
-    await prisma.$connect();
-    console.log('เชื่อมต่อฐานข้อมูลสำเร็จ');
-    return true;
-  } catch (error) {
-    console.error('ไม่สามารถเชื่อมต่อฐานข้อมูลได้:', error);
-    return false;
-  } finally {
-    await prisma.$disconnect();
-  }
-}
 
 // สร้างโฟลเดอร์สำหรับเก็บไฟล์อัปโหลด
 const uploadsDir = path.join(__dirname, '../uploads');
@@ -65,6 +56,20 @@ app.get('/api/health', async (req, res) => {
     timestamp: new Date()
   });
 });
+
+// ตรวจสอบการเชื่อมต่อฐานข้อมูล
+async function checkDatabaseConnection() {
+  try {
+    await prisma.$connect();
+    console.log('เชื่อมต่อฐานข้อมูลสำเร็จ');
+    return true;
+  } catch (error) {
+    console.error('ไม่สามารถเชื่อมต่อฐานข้อมูลได้:', error);
+    return false;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 // จัดการเส้นทางที่ไม่มี
 app.use((req, res) => {
