@@ -1,27 +1,59 @@
 version: '3.8'
+
 services:
-  postgres:
-    image: postgres:latest
-    container_name: facesocial-postgres
-    ports:
-      - "5432:5432"
+  db:
+    image: postgres:14
     environment:
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Boss.1212
       POSTGRES_DB: facesocial
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: facesocial-pgadmin
+      - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5050:80"
+      - "5432:5432"
+    restart: unless-stopped
+
+  facenet-api:
+    build: ./facenet-api
+    volumes:
+      - ./models:/app/models
+    ports:
+      - "8000:8000"
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@facesocial.com
-      PGADMIN_DEFAULT_PASSWORD: Boss.1212
+      - MODEL_PATH=/app/models/facenet/20180402-114759/20180402-114759.pb
+      - CUDA_VISIBLE_DEVICES=0
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
     depends_on:
-      - postgres
+      - db
+      - facenet-api
+    environment:
+      - DATABASE_URL=postgresql://postgres:Boss.1212@db:5432/facesocial
+      - FACENET_API_URL=http://facenet-api:8000
+      - JWT_SECRET=your_secure_jwt_secret
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+      - NEXT_PUBLIC_FACENET_API_URL=http://localhost:8000
+    restart: unless-stopped
 
 volumes:
-  postgres-data:
+  postgres_data:
