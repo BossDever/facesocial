@@ -473,3 +473,37 @@ export const getApiStatus = async (req: Request, res: Response) => {
     });
   }
 };
+
+// เพิ่มฟังก์ชันใหม่: ตรวจสอบชื่อผู้ใช้ซ้ำ
+export const checkUsername = async (req: Request, res: Response) => {
+  try {
+    const { username } = req.query;
+    
+    if (!username || typeof username !== 'string') {
+      return res.status(400).json({
+        message: 'กรุณาระบุชื่อผู้ใช้ที่ต้องการตรวจสอบ'
+      });
+    }
+
+    // ตรวจสอบว่าชื่อผู้ใช้มีอยู่แล้วหรือไม่
+    const existingUser = await prisma.user.findFirst({
+      where: { 
+        username: {
+          equals: username,
+          mode: 'insensitive' // ไม่สนใจตัวพิมพ์ใหญ่-เล็ก
+        }
+      }
+    });
+
+    return res.status(200).json({
+      available: !existingUser,
+      message: existingUser ? 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว' : 'ชื่อผู้ใช้นี้สามารถใช้งานได้'
+    });
+  } catch (error: any) {
+    console.error('Check username error:', error);
+    return res.status(500).json({
+      message: 'เกิดข้อผิดพลาดในการตรวจสอบชื่อผู้ใช้',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};

@@ -38,4 +38,9 @@ router.get('/status', (req, res, next) => {
   authController.getApiStatus(req, res).catch(next);
 });
 
+// เพิ่ม endpoint ใหม่: ตรวจสอบชื่อผู้ใช้ซ้ำ
+router.get('/check-username', (req, res, next) => {
+  authController.checkUsername(req, res).catch(next);
+});
+
 export default router;
