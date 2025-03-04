@@ -409,6 +409,40 @@ export const updateUserProfile = async (req: Request, res: Response) => {
   }
 };
 
+// เพิ่มฟังก์ชันใหม่: ตรวจสอบอีเมลซ้ำ
+export const checkEmail = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.query;
+    
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        message: 'กรุณาระบุอีเมลที่ต้องการตรวจสอบ'
+      });
+    }
+
+    // ตรวจสอบว่าอีเมลมีอยู่แล้วหรือไม่
+    const existingUser = await prisma.user.findFirst({
+      where: { 
+        email: {
+          equals: email,
+          mode: 'insensitive' // ไม่สนใจตัวพิมพ์ใหญ่-เล็ก
+        }
+      }
+    });
+
+    return res.status(200).json({
+      available: !existingUser,
+      message: existingUser ? 'อีเมลนี้มีผู้ใช้งานแล้ว' : 'อีเมลนี้สามารถใช้งานได้'
+    });
+  } catch (error: any) {
+    console.error('Check email error:', error);
+    return res.status(500).json({
+      message: 'เกิดข้อผิดพลาดในการตรวจสอบอีเมล',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 // ฟังก์ชันดึงข้อมูลสถานะ API ทั้งหมด
 export const getApiStatus = async (req: Request, res: Response) => {
   try {

@@ -43,4 +43,9 @@ router.get('/check-username', (req, res, next) => {
   authController.checkUsername(req, res).catch(next);
 });
 
+// เพิ่ม endpoint ใหม่: ตรวจสอบอีเมลซ้ำ
+router.get('/check-email', (req, res, next) => {
+  authController.checkEmail(req, res).catch(next);
+});
+
 export default router;
