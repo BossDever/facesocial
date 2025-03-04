@@ -34,6 +34,25 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     });
   };
   
+  // ตรวจสอบขนาดรูปภาพ
+  const checkImageDimensions = (imageSrc: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = function() {
+        // ตรวจสอบขนาดรูปภาพ (อย่างน้อย 300x300 พิกเซล)
+        if (img.width < 300 || img.height < 300) {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      };
+      img.onerror = function() {
+        resolve(false);
+      };
+      img.src = imageSrc;
+    });
+  };
+  
   // ประมวลผลรูปภาพ
   const processImage = async (file: File): Promise<{ success: boolean; error?: string; imageSrc?: string; score?: number }> => {
     try {
@@ -47,6 +66,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           // ตรวจสอบรูปซ้ำ
           if (isDuplicateImage(imageSrc)) {
             resolve({ success: false, error: 'รูปภาพนี้มีอยู่แล้ว' });
+            return;
+          }
+          
+          // ตรวจสอบขนาดรูปภาพ
+          const validDimensions = await checkImageDimensions(imageSrc);
+          if (!validDimensions) {
+            resolve({ success: false, error: 'ขนาดรูปภาพเล็กเกินไป (ต้องการอย่างน้อย 300x300 พิกเซล)' });
             return;
           }
           
@@ -68,8 +94,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             // คำนวณคะแนนความมั่นใจ (0-100)
             const score = result.score;
             
-            if (score < 60) {
-              resolve({ success: false, error: `คุณภาพใบหน้าต่ำเกินไป (${Math.round(score)}%)` });
+            // เพิ่มความเข้มงวดจาก 60% เป็น 90%
+            if (score < 90) {
+              resolve({ 
+                success: false, 
+                error: `คุณภาพใบหน้าต่ำเกินไป (${Math.round(score)}%) กรุณาถ่ายในที่ที่มีแสงสว่างเพียงพอและให้ใบหน้าชัดเจน` 
+              });
               return;
             }
             
@@ -262,7 +292,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         )}
         
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          JPG, PNG ขนาดไม่เกิน 5MB ต่อรูป
+          JPG, PNG ขนาดไม่เกิน 5MB ต่อรูป และขนาดอย่างน้อย 300x300 พิกเซล
         </p>
         
         {successMessage && (
@@ -284,7 +314,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           <li>เลือกรูปภาพที่เห็นใบหน้าชัดเจน ไม่เบลอ</li>
           <li>ใบหน้าควรอยู่ตรงกลางและมีขนาดใหญ่พอสมควร</li>
           <li>รูปภาพควรมีแสงสว่างเพียงพอ</li>
-          <li>รูปภาพที่มีอยู่แล้วจะถูกข้ามโดยอัตโนมัติ</li>
+          <li>ถ่ายภาพในมุมตรง ไม่เอียงมากเกินไป</li>
+          <li>ไม่สวมแว่นตาหรืออุปกรณ์ที่บดบังใบหน้า</li>
           <li><strong>รองรับเฉพาะรูปที่มีใบหน้าเดียวเท่านั้น</strong></li>
           <li>สามารถเลือกหลายรูปพร้อมกันได้ (คลิกค้างไว้หรือกด Ctrl เพื่อเลือกหลายรูป)</li>
           <li><strong>ต้องอัปโหลดอย่างน้อย {minRequired} รูป</strong> เพื่อใช้สำหรับการยืนยันตัวตน</li>

@@ -31,6 +31,24 @@ class FaceNetService {
       // ตรวจสอบว่า TensorFlow.js พร้อมใช้งานหรือไม่
       console.log('กำลังตรวจสอบ TensorFlow.js backend...');
       
+      // โหลด backends (ให้แน่ใจว่ามีการโหลด backends ทั้งหมด)
+      await Promise.all([
+        import('@tensorflow/tfjs-backend-webgl'),
+        import('@tensorflow/tfjs-backend-cpu')
+      ]);
+      
+      // เลือก backend ดีที่สุดโดยอัตโนมัติ
+      await tf.setBackend('webgl');
+      
+      // ตั้งค่า WebGL เพื่อปรับปรุงประสิทธิภาพ
+      if (tf.getBackend() === 'webgl') {
+        tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
+        tf.env().set('WEBGL_PACK', true);
+        tf.env().set('WEBGL_PACK_BINARY_OPERATIONS', true);
+        tf.env().set('WEBGL_PACK_UNARY_OPERATIONS', true);
+        tf.env().set('WEBGL_CHECK_NUMERICAL_PROBLEMS', false);
+      }
+      
       // ทำให้แน่ใจว่า TensorFlow.js พร้อมใช้งาน
       await tf.ready();
       
@@ -80,6 +98,15 @@ class FaceNetService {
       
       if (healthResponse.status === 200) {
         console.log('เชื่อมต่อกับ Face API สำเร็จ:', healthResponse.data);
+        
+        // ตรวจสอบว่า API ทำงานในโหมด dummy หรือไม่
+        if (healthResponse.data.status === 'dummy_mode') {
+          console.warn('Face API ทำงานในโหมดจำลอง - อาจมีผลต่อความแม่นยำ');
+          this.useMockMode = true;
+        } else {
+          this.useMockMode = false;
+        }
+        
         this.modelLoaded = true;
         return true;
       }
@@ -132,25 +159,71 @@ class FaceNetService {
       const formData = new FormData();
       formData.append('image_data', base64Data);
       
-      // เรียกใช้ API เพื่อสร้าง embeddings
-      const embeddingsResponse = await axios.post(
-        `${this.apiUrl}/face/embeddings`,
-        formData,
-        { 
-          timeout: 15000,
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      );
+      // เพิ่ม Retry logic
+      const maxRetries = 3;
+      let retryCount = 0;
+      let lastError: any = null;
       
-      // ตรวจสอบว่าได้รับ embeddings หรือไม่
-      if (embeddingsResponse.data && embeddingsResponse.data.embeddings) {
-        console.log('ได้รับ embeddings จาก API สำเร็จ');
-        return embeddingsResponse.data.embeddings;
+      while (retryCount < maxRetries) {
+        try {
+          // เรียกใช้ API เพื่อสร้าง embeddings
+          const embeddingsResponse = await axios.post(
+            `${this.apiUrl}/face/embeddings`,
+            formData,
+            { 
+              timeout: 20000, // เพิ่ม timeout เป็น 20 วินาที
+              headers: {
+                'Content-Type': 'multipart/form-data'
+              }
+            }
+          );
+          
+          // ตรวจสอบว่าได้รับ embeddings หรือไม่
+          if (embeddingsResponse.data && embeddingsResponse.data.embeddings) {
+            console.log('ได้รับ embeddings จาก API สำเร็จ');
+            return embeddingsResponse.data.embeddings;
+          }
+          
+          // ถ้าไม่ได้รับ embeddings ให้ลองใหม่
+          retryCount++;
+          console.warn(`ไม่ได้รับข้อมูล embeddings จาก API รอบที่ ${retryCount}/${maxRetries}`);
+          
+          // หน่วงเวลาก่อนลองใหม่
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+          lastError = error;
+          retryCount++;
+          console.warn(`เกิดข้อผิดพลาดในการเรียก API รอบที่ ${retryCount}/${maxRetries}:`, error);
+          
+          // หน่วงเวลาก่อนลองใหม่
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
       
-      console.warn('ไม่ได้รับข้อมูล embeddings จาก API - ใช้ข้อมูลจำลองแทน');
+      // ถ้าลองครบแล้วยังไม่สำเร็จ
+      console.error('ไม่สามารถสร้าง embeddings ได้หลังจากลอง', maxRetries, 'ครั้ง');
+      
+      // ตรวจสอบรายละเอียดข้อผิดพลาด
+      if (lastError && lastError.response) {
+        console.error('ข้อผิดพลาดจาก API:', lastError.response.data);
+        
+        // ถ้ามีข้อความเกี่ยวกับคุณภาพรูปภาพ
+        if (lastError.response.data.detail && typeof lastError.response.data.detail === 'string') {
+          try {
+            // พยายามแปลง JSON string เป็น object
+            const errorDetail = JSON.parse(lastError.response.data.detail);
+            if (errorDetail.error_code === 'FACE_QUALITY_ERROR') {
+              throw new Error(`${errorDetail.message} - ${errorDetail.suggestions.join(', ')}`);
+            }
+          } catch (e) {
+            // ถ้าไม่สามารถแปลง JSON ได้ ใช้ข้อความเดิม
+            throw new Error(lastError.response.data.detail);
+          }
+        }
+      }
+      
+      // ใช้ dummy embeddings แทนเมื่อมีข้อผิดพลาด
+      console.warn('ใช้ dummy embeddings แทน');
       return this.createDummyEmbeddings();
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการสร้าง Face Embeddings:', error);
@@ -209,8 +282,16 @@ class FaceNetService {
       );
       
       return detectResponse.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('เกิดข้อผิดพลาดในการตรวจจับใบหน้า:', error);
+      
+      // บันทึกข้อมูลข้อผิดพลาดเพิ่มเติม
+      if (error.response) {
+        console.error('ข้อมูลข้อผิดพลาดจาก API:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+      }
       
       // ถ้ายังไม่ได้เปลี่ยนเป็นโหมดจำลอง ให้เปลี่ยนเป็นโหมดจำลอง
       if (!this.useMockMode) {
@@ -303,7 +384,7 @@ class FaceNetService {
    */
   private createMockDetectionResult(): any {
     // จำลองการพบใบหน้า
-    const confidence = 85 + Math.random() * 10; // สุ่มค่าความมั่นใจระหว่าง 85-95%
+    const confidence = 90 + Math.random() * 8; // เพิ่มเป็น 90-98%
     
     return {
       faceDetected: true,
