@@ -8,6 +8,16 @@ class FaceNetService:
     def __init__(self, model_path):
         print(f"กำลังโหลดโมเดล FaceNet จาก {model_path}")
         
+        # ตั้งค่า GPU
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        if gpus:
+            try:
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+                print(f"พบ GPU {len(gpus)} เครื่อง และตั้งค่าเรียบร้อยแล้ว")
+            except RuntimeError as e:
+                print(f"Error setting GPU memory growth: {e}")
+                
         # โหลดโมเดล FaceNet จากไฟล์ .pb
         with tf.io.gfile.GFile(model_path, 'rb') as f:
             graph_def = tf.compat.v1.GraphDef()
@@ -17,10 +27,15 @@ class FaceNetService:
         self.graph = tf.Graph()
         with self.graph.as_default():
             tf.import_graph_def(graph_def, name='')
-            self.sess = tf.compat.v1.Session(graph=self.graph)
+            # สร้าง session แบบ GPU-optimized
+            gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
+            config = tf.compat.v1.ConfigProto(gpu_options=gpu_options,
+                                           allow_soft_placement=True)
+            config.gpu_options.per_process_gpu_memory_fraction = 0.7
+            self.sess = tf.compat.v1.Session(graph=self.graph, config=config)
         
-        # ตัวตรวจจับใบหน้า MTCNN
-        self.detector = MTCNN()
+        # ตัวตรวจจับใบหน้า MTCNN ที่เข้มงวดขึ้น
+        self.detector = MTCNN(min_face_size=80, steps_threshold=[0.6, 0.7, 0.9])
         
         # ทดสอบ graph
         try:
@@ -52,8 +67,17 @@ class FaceNetService:
                         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 else:
                     print(f"รูปแบบรูปภาพไม่ถูกต้อง: shape={img.shape}")
+                    return None
             
             print(f"รูปภาพที่จะประมวลผลมีขนาด: {img.shape}")
+            
+            # ปรับปรุงคุณภาพรูปภาพ (เพิ่มความชัด)
+            lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+            l, a, b = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            l = clahe.apply(l)
+            lab = cv2.merge((l, a, b))
+            img = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
             
             # ตรวจจับใบหน้า
             results = self.detector.detect_faces(img)
@@ -63,22 +87,48 @@ class FaceNetService:
             
             print(f"พบใบหน้า {len(results)} ใบหน้า")
             
-            # ใช้ใบหน้าแรกที่พบ
-            x, y, width, height = results[0]['box']
+            # ตรวจสอบความมั่นใจในการตรวจจับ
+            result = results[0]
+            confidence = result.get('confidence', 0)
+            if confidence < 0.95:
+                print(f"ความมั่นใจในการตรวจจับใบหน้าต่ำเกินไป: {confidence:.2f}")
+                return None
+            
+            # ขยายกรอบใบหน้าออกไป 30%
+            x, y, width, height = result['box']
             # ป้องกันค่าติดลบ
             x, y = max(0, x), max(0, y)
-            face = img[y:y+height, x:x+width]
+            
+            # คำนวณจุดกึ่งกลางและขยายกรอบ
+            center_x, center_y = x + width // 2, y + height // 2
+            new_half_size = int(max(width, height) * 0.65)  # ขยาย 30%
+            
+            # คำนวณกรอบใหม่
+            new_x = max(0, center_x - new_half_size)
+            new_y = max(0, center_y - new_half_size)
+            new_width = min(img.shape[1] - new_x, new_half_size * 2)
+            new_height = min(img.shape[0] - new_y, new_half_size * 2)
+            
+            # ตัดส่วนใบหน้า
+            face = img[new_y:new_y+new_height, new_x:new_x+new_width]
             
             # ตรวจสอบว่าสามารถตัดใบหน้าได้
             if face.size == 0:
                 print("ไม่สามารถตัดส่วนใบหน้าได้ (ขนาดเป็น 0)")
                 return None
             
-            print(f"ใบหน้าที่ตัดได้มีขนาด: {face.shape}")
+            # ตรวจสอบความชัดของภาพ
+            gray_face = cv2.cvtColor(face, cv2.COLOR_RGB2GRAY)
+            laplacian_var = cv2.Laplacian(gray_face, cv2.CV_64F).var()
+            if laplacian_var < 100:
+                print(f"ภาพใบหน้าไม่ชัดพอ: {laplacian_var:.2f}")
+                return None
+            
+            print(f"ใบหน้าที่ตัดได้มีขนาด: {face.shape}, ความชัด: {laplacian_var:.2f}")
             
             # ปรับขนาดเป็น 160x160 (ตามที่ FaceNet ต้องการ)
             try:
-                face = cv2.resize(face, (160, 160))
+                face = cv2.resize(face, (160, 160), interpolation=cv2.INTER_CUBIC)
                 print("ปรับขนาดใบหน้าเป็น 160x160 สำเร็จ")
             except Exception as e:
                 print(f"ไม่สามารถปรับขนาดใบหน้าได้: {e}")
@@ -103,6 +153,7 @@ class FaceNetService:
         # เตรียมรูปภาพ
         face = self.preprocess_image(img)
         if face is None:
+            print("preprocess_image ล้มเหลว ไม่สามารถสร้าง embeddings ได้")
             return None
         
         # เพิ่มมิติแรก (batch)

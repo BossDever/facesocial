@@ -1,27 +1,26 @@
-FROM python:3.9-slim
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
 WORKDIR /app
 
-# ติดตั้ง dependencies สำหรับ OpenCV
+# Install Python and required packages
 RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+    python3 \
+    python3-pip \
     libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# คัดลอกไฟล์ requirements
+# Copy requirements file
 COPY requirements.txt .
 
-# ติดตั้ง dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# คัดลอกโค้ด
+# Copy application code
 COPY . .
 
-# คัดลอกโมเดล FaceNet (ถ้าโมเดลอยู่ในโฟลเดอร์ models)
-# COPY ../models/facenet/20180402-114759.pb /app/models/
+# Expose the port the app runs on
+EXPOSE 8000
 
-# รัน API
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the application
+CMD ["python3", "main.py"]
