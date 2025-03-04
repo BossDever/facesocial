@@ -188,32 +188,27 @@ class ApiService {
    * @param username ชื่อผู้ใช้ที่ต้องการตรวจสอบ
    * @returns สถานะการตรวจสอบ
    */
-  async checkUsername(username: string): Promise<{ available: boolean; message: string }> {
-    try {
-      // ใช้เส้นทาง API ที่ถูกต้อง (แก้ไข)
-      const response = await this.axiosInstance.get('/api/auth/check-username', {
-        params: { username }
-      });
-      
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to check username:', error);
-      
-      // กรณีที่ API ยังไม่พร้อมใช้งาน ให้จำลองการตรวจสอบโดยดูว่าชื่อผู้ใช้เป็น admin หรือไม่
-      if (username.toLowerCase() === 'admin') {
-        return {
-          available: false,
-          message: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว'
-        };
-      }
-      
-      // สำหรับชื่อผู้ใช้อื่น ๆ ให้สมมติว่าใช้ได้
-      return {
-        available: true,
-        message: 'ชื่อผู้ใช้นี้สามารถใช้งานได้'
-      };
-    }
+  // frontend/src/app/services/api.service.ts
+
+// ตรวจสอบชื่อผู้ใช้ว่ามีในระบบแล้วหรือไม่
+async checkUsername(username: string): Promise<{ available: boolean; message: string }> {
+  try {
+    // แก้ไขจาก /api/auth/check-username เป็น /auth/check-username
+    const response = await this.axiosInstance.get('/auth/check-username', {
+      params: { username }
+    });
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to check username:', error);
+    
+    // ถ้าเกิด error 404 หรือเข้าไม่ถึง API ให้สมมติว่าชื่อผู้ใช้มีอยู่แล้ว (เพื่อความปลอดภัย)
+    return {
+      available: false,
+      message: 'ไม่สามารถตรวจสอบชื่อผู้ใช้ได้ กรุณาลองอีกครั้งหรือใช้ชื่อผู้ใช้อื่น'
+    };
   }
+}
   
   /**
    * ลงทะเบียนผู้ใช้ใหม่
@@ -639,6 +634,37 @@ class ApiService {
     }
   }
   
+  /**
+ * ตรวจสอบอีเมลว่ามีในระบบแล้วหรือไม่
+ * @param email อีเมลที่ต้องการตรวจสอบ
+ * @returns สถานะการตรวจสอบ
+ */
+async checkEmail(email: string): Promise<{ available: boolean; message: string }> {
+  try {
+    const response = await this.axiosInstance.get('/auth/check-email', {
+      params: { email }
+    });
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('Failed to check email:', error);
+    
+    // กรณีที่ API ยังไม่พร้อมใช้งาน สมมติว่าอีเมลที่มี @ gmail.com มีอยู่แล้ว (สำหรับการทดสอบ)
+    if (email.toLowerCase().includes('@gmail.com')) {
+      return {
+        available: false,
+        message: 'อีเมลนี้มีผู้ใช้งานแล้ว'
+      };
+    }
+    
+    // สำหรับอีเมลอื่น ๆ ให้สมมติว่าใช้ได้
+    return {
+      available: true,
+      message: 'อีเมลนี้สามารถใช้งานได้'
+    };
+  }
+}
+
   /**
    * Generic POST request
    */

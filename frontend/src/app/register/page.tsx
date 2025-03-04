@@ -47,8 +47,9 @@ export default function RegisterPage() {
   // รูปภาพที่เลือกสำหรับดูแบบขยาย
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
-  // สถานะการตรวจสอบชื่อผู้ใช้
+  // สถานะการตรวจสอบชื่อผู้ใช้และอีเมล
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   
   // โหลดข้อมูลจาก localStorage เมื่อโหลดหน้า
   useEffect(() => {
@@ -240,6 +241,15 @@ export default function RegisterPage() {
       
       return () => clearTimeout(timeoutId);
     }
+    
+    // ตรวจสอบอีเมลเมื่อมีการเปลี่ยนแปลง (debounced)
+    if (name === 'email' && value.trim().length >= 5 && value.includes('@')) {
+      const timeoutId = setTimeout(() => {
+        checkEmailAvailability(value);
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
   };
   
   // ตรวจสอบว่าชื่อผู้ใช้มีอยู่ในระบบหรือไม่
@@ -250,15 +260,20 @@ export default function RegisterPage() {
     try {
       setIsCheckingUsername(true);
       
-      // เรียกใช้ API เพื่อตรวจสอบชื่อผู้ใช้
-      const response = await apiService.get('/api/auth/check-username', {
+      // เรียกใช้ API เพื่อตรวจสอบชื่อผู้ใช้ - แก้ไขจาก /api/auth/check-username เป็น /auth/check-username
+      const response = await apiService.get('/auth/check-username', {
         params: { username: username.trim() }
       }).catch(err => {
         // กรณี API ไม่พร้อมใช้งาน ให้ทำการจำลองการตรวจสอบ
         console.warn('ไม่สามารถตรวจสอบชื่อผู้ใช้ผ่าน API ได้:', err);
         
-        // สำหรับการทดสอบ สมมติว่าชื่อผู้ใช้ที่ขึ้นต้นด้วย "test" มีอยู่แล้ว
-        return { available: !username.toLowerCase().startsWith('test') };
+        // สำหรับความปลอดภัย สมมติว่าชื่อผู้ใช้ไม่ว่าง
+        setErrors(prev => ({
+          ...prev,
+          username: 'ไม่สามารถตรวจสอบชื่อผู้ใช้ได้ กรุณาลองอีกครั้งหรือใช้ชื่อผู้ใช้อื่น'
+        }));
+        
+        return { available: false, message: 'ไม่สามารถตรวจสอบชื่อผู้ใช้ได้' };
       });
       
       // ตรวจสอบผลลัพธ์
@@ -267,11 +282,71 @@ export default function RegisterPage() {
           ...prev,
           username: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว กรุณาเลือกชื่อผู้ใช้อื่น'
         }));
+      } else if (response && response.available) {
+        // ลบข้อผิดพลาดเมื่อชื่อผู้ใช้ใช้ได้
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.username;
+          return newErrors;
+        });
       }
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการตรวจสอบชื่อผู้ใช้:', error);
+      setErrors(prev => ({
+        ...prev,
+        username: 'ไม่สามารถตรวจสอบชื่อผู้ใช้ได้ กรุณาลองอีกครั้ง'
+      }));
     } finally {
       setIsCheckingUsername(false);
+    }
+  };
+  
+  // ตรวจสอบว่าอีเมลมีอยู่ในระบบแล้วหรือไม่
+  const checkEmailAvailability = async (email: string) => {
+    // ถ้าอีเมลไม่ถูกต้อง ไม่ต้องตรวจสอบ
+    if (!email || !email.includes('@') || !email.includes('.')) return;
+    
+    try {
+      setIsCheckingEmail(true);
+      
+      // เรียกใช้ API เพื่อตรวจสอบอีเมล
+      const response = await apiService.get('/auth/check-email', {
+        params: { email: email.trim() }
+      }).catch(err => {
+        // กรณี API ไม่พร้อมใช้งาน
+        console.warn('ไม่สามารถตรวจสอบอีเมลผ่าน API ได้:', err);
+        
+        // สำหรับความปลอดภัย สมมติว่าอีเมลไม่ว่าง
+        setErrors(prev => ({
+          ...prev,
+          email: 'ไม่สามารถตรวจสอบอีเมลได้ กรุณาลองอีกครั้งหรือใช้อีเมลอื่น'
+        }));
+        
+        return { available: false, message: 'ไม่สามารถตรวจสอบอีเมลได้' };
+      });
+      
+      // ตรวจสอบผลลัพธ์
+      if (response && !response.available) {
+        setErrors(prev => ({
+          ...prev,
+          email: 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาใช้อีเมลอื่น'
+        }));
+      } else if (response && response.available) {
+        // ลบข้อผิดพลาดเมื่ออีเมลใช้ได้
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.email;
+          return newErrors;
+        });
+      }
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการตรวจสอบอีเมล:', error);
+      setErrors(prev => ({
+        ...prev,
+        email: 'ไม่สามารถตรวจสอบอีเมลได้ กรุณาลองอีกครั้ง'
+      }));
+    } finally {
+      setIsCheckingEmail(false);
     }
   };
   
@@ -313,39 +388,83 @@ export default function RegisterPage() {
       return false;
     }
     
-    // ตรวจสอบชื่อผู้ใช้ผ่าน API
-    setIsCheckingUsername(true);
+    // ถ้ามีข้อผิดพลาดชื่อผู้ใช้หรืออีเมลอยู่แล้ว (จากการตรวจสอบก่อนหน้า) ไม่ต้องทำต่อ
+    if (errors.username || errors.email) {
+      return false;
+    }
     
+    // ตรวจสอบชื่อผู้ใช้และอีเมลผ่าน API
+    let usernameValid = true;
+    let emailValid = true;
+    
+    // ตรวจสอบชื่อผู้ใช้
+    setIsCheckingUsername(true);
     try {
-      // เรียกใช้ API เพื่อตรวจสอบชื่อผู้ใช้
-      const response = await apiService.get('/api/auth/check-username', {
+      const usernameResponse = await apiService.get('/auth/check-username', {
         params: { username: userData.username.trim() }
       }).catch(err => {
-        // กรณี API ไม่พร้อมใช้งาน แต่เราจะสมมติว่าตรวจสอบผ่าน
+        // กรณี API ไม่พร้อมใช้งาน
         console.warn('ไม่สามารถตรวจสอบชื่อผู้ใช้ผ่าน API ได้:', err);
-        return { available: true };
+        setErrors(prev => ({
+          ...prev,
+          username: 'ไม่สามารถตรวจสอบชื่อผู้ใช้ได้ กรุณาลองอีกครั้งหรือใช้ชื่อผู้ใช้อื่น'
+        }));
+        return { available: false };
       });
       
-      // ตรวจสอบผลลัพธ์
-      if (response && !response.available) {
+      if (!usernameResponse || !usernameResponse.available) {
         setErrors(prev => ({
           ...prev,
           username: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว กรุณาเลือกชื่อผู้ใช้อื่น'
         }));
-        setIsCheckingUsername(false);
-        return false;
+        usernameValid = false;
       }
-      
-      // ตรวจสอบผ่าน
-      setIsCheckingUsername(false);
-      return true;
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการตรวจสอบชื่อผู้ใช้:', error);
+      setErrors(prev => ({
+        ...prev,
+        username: 'ไม่สามารถตรวจสอบชื่อผู้ใช้ได้ กรุณาลองอีกครั้ง'
+      }));
+      usernameValid = false;
+    } finally {
       setIsCheckingUsername(false);
-      
-      // กรณีมีข้อผิดพลาด แต่ให้ผ่านไปก่อน (ระบบจะตรวจสอบอีกครั้งตอนลงทะเบียน)
-      return true;
     }
+    
+    // ตรวจสอบอีเมล
+    setIsCheckingEmail(true);
+    try {
+      const emailResponse = await apiService.get('/auth/check-email', {
+        params: { email: userData.email.trim() }
+      }).catch(err => {
+        // กรณี API ไม่พร้อมใช้งาน
+        console.warn('ไม่สามารถตรวจสอบอีเมลผ่าน API ได้:', err);
+        setErrors(prev => ({
+          ...prev,
+          email: 'ไม่สามารถตรวจสอบอีเมลได้ กรุณาลองอีกครั้งหรือใช้อีเมลอื่น'
+        }));
+        return { available: false };
+      });
+      
+      if (!emailResponse || !emailResponse.available) {
+        setErrors(prev => ({
+          ...prev,
+          email: 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาใช้อีเมลอื่น'
+        }));
+        emailValid = false;
+      }
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการตรวจสอบอีเมล:', error);
+      setErrors(prev => ({
+        ...prev,
+        email: 'ไม่สามารถตรวจสอบอีเมลได้ กรุณาลองอีกครั้ง'
+      }));
+      emailValid = false;
+    } finally {
+      setIsCheckingEmail(false);
+    }
+    
+    // ตรวจสอบว่าทั้งชื่อผู้ใช้และอีเมลผ่านหรือไม่
+    return usernameValid && emailValid;
   };
   
   // ไปขั้นตอนถัดไป
@@ -356,6 +475,8 @@ export default function RegisterPage() {
     if (isValid) {
       setStep(2);
       localStorage.setItem('registrationStep', '2');
+    } else {
+      console.log('ไม่สามารถไปขั้นตอนถัดไปได้ เนื่องจากข้อมูลไม่ถูกต้องหรือชื่อผู้ใช้/อีเมลซ้ำ');
     }
   };
   
@@ -590,6 +711,12 @@ export default function RegisterPage() {
                   error={errors.email}
                   required
                 />
+                {isCheckingEmail && (
+                  <div className="text-sm text-blue-600 dark:text-blue-400 mt-1 flex items-center">
+                    <div className="animate-spin h-3 w-3 border-t-2 border-b-2 border-blue-500 rounded-full mr-2"></div>
+                    กำลังตรวจสอบอีเมล...
+                  </div>
+                )}
                 
                 <Input
                   label="รหัสผ่าน"
@@ -636,8 +763,8 @@ export default function RegisterPage() {
                     type="button"
                     onClick={handleNextStep}
                     className="w-full"
-                    isLoading={isCheckingUsername}
-                    disabled={isCheckingUsername || Boolean(errors.username)}
+                    isLoading={isCheckingUsername || isCheckingEmail}
+                    disabled={isCheckingUsername || isCheckingEmail || Boolean(errors.username) || Boolean(errors.email)}
                   >
                     ต่อไป
                   </Button>
