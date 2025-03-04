@@ -34,7 +34,19 @@ export default function LoginPage() {
       // ถ้ามี token อยู่แล้ว ให้นำไปยังหน้า feed
       router.push('/feed');
     }
-  }, [sessionExpired, router]);
+    
+    // ตรวจสอบว่ามีพารามิเตอร์ error หรือไม่
+    const errorMessage = searchParams.get('error');
+    if (errorMessage) {
+      setError(decodeURIComponent(errorMessage));
+    }
+    
+    // ตรวจสอบว่ามีพารามิเตอร์ success หรือไม่
+    const successMessage = searchParams.get('success');
+    if (successMessage) {
+      setMessage(decodeURIComponent(successMessage));
+    }
+  }, [sessionExpired, router, searchParams]);
   
   // จัดการการเปลี่ยนแปลงใน input
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,6 +205,12 @@ export default function LoginPage() {
                 >
                   เข้าสู่ระบบด้วยใบหน้า
                 </Button>
+              </div>
+              
+              <div className="text-center">
+                <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400">
+                  ลืมรหัสผ่าน?
+                </Link>
               </div>
             </div>
             

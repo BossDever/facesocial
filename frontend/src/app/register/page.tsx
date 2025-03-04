@@ -47,6 +47,9 @@ export default function RegisterPage() {
   // รูปภาพที่เลือกสำหรับดูแบบขยาย
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
+  // สถานะการตรวจสอบชื่อผู้ใช้
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  
   // โหลดข้อมูลจาก localStorage เมื่อโหลดหน้า
   useEffect(() => {
     try {
@@ -228,39 +231,129 @@ export default function RegisterPage() {
         return newErrors;
       });
     }
+    
+    // ตรวจสอบชื่อผู้ใช้เมื่อมีการเปลี่ยนแปลง (debounced)
+    if (name === 'username' && value.trim().length >= 3) {
+      const timeoutId = setTimeout(() => {
+        checkUsernameAvailability(value);
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  };
+  
+  // ตรวจสอบว่าชื่อผู้ใช้มีอยู่ในระบบหรือไม่
+  const checkUsernameAvailability = async (username: string) => {
+    // ถ้าชื่อผู้ใช้สั้นเกินไป ไม่ต้องตรวจสอบ
+    if (!username || username.trim().length < 3) return;
+    
+    try {
+      setIsCheckingUsername(true);
+      
+      // เรียกใช้ API เพื่อตรวจสอบชื่อผู้ใช้
+      const response = await apiService.get('/api/auth/check-username', {
+        params: { username: username.trim() }
+      }).catch(err => {
+        // กรณี API ไม่พร้อมใช้งาน ให้ทำการจำลองการตรวจสอบ
+        console.warn('ไม่สามารถตรวจสอบชื่อผู้ใช้ผ่าน API ได้:', err);
+        
+        // สำหรับการทดสอบ สมมติว่าชื่อผู้ใช้ที่ขึ้นต้นด้วย "test" มีอยู่แล้ว
+        return { available: !username.toLowerCase().startsWith('test') };
+      });
+      
+      // ตรวจสอบผลลัพธ์
+      if (response && !response.available) {
+        setErrors(prev => ({
+          ...prev,
+          username: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว กรุณาเลือกชื่อผู้ใช้อื่น'
+        }));
+      }
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการตรวจสอบชื่อผู้ใช้:', error);
+    } finally {
+      setIsCheckingUsername(false);
+    }
   };
   
   // ตรวจสอบข้อมูลในขั้นตอนที่ 1
-  const validateStep1 = () => {
+  const validateStep1 = async () => {
     const newErrors: Record<string, string> = {};
     
+    // ตรวจสอบชื่อผู้ใช้
     if (!userData.username) {
       newErrors.username = 'กรุณากรอกชื่อผู้ใช้';
+    } else if (userData.username.length < 3) {
+      newErrors.username = 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร';
     }
     
+    // ตรวจสอบอีเมล
     if (!userData.email) {
       newErrors.email = 'กรุณากรอกอีเมล';
     } else if (!/\S+@\S+\.\S+/.test(userData.email)) {
       newErrors.email = 'รูปแบบอีเมลไม่ถูกต้อง';
     }
     
+    // ตรวจสอบรหัสผ่าน
     if (!userData.password) {
       newErrors.password = 'กรุณากรอกรหัสผ่าน';
     } else if (userData.password.length < 8) {
       newErrors.password = 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';
     }
     
+    // ตรวจสอบการยืนยันรหัสผ่าน
     if (userData.password !== userData.confirmPassword) {
       newErrors.confirmPassword = 'รหัสผ่านไม่ตรงกัน';
     }
     
+    // ตั้งค่าข้อผิดพลาด
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    
+    // ถ้ามีข้อผิดพลาด ไม่ต้องทำต่อ
+    if (Object.keys(newErrors).length > 0) {
+      return false;
+    }
+    
+    // ตรวจสอบชื่อผู้ใช้ผ่าน API
+    setIsCheckingUsername(true);
+    
+    try {
+      // เรียกใช้ API เพื่อตรวจสอบชื่อผู้ใช้
+      const response = await apiService.get('/api/auth/check-username', {
+        params: { username: userData.username.trim() }
+      }).catch(err => {
+        // กรณี API ไม่พร้อมใช้งาน แต่เราจะสมมติว่าตรวจสอบผ่าน
+        console.warn('ไม่สามารถตรวจสอบชื่อผู้ใช้ผ่าน API ได้:', err);
+        return { available: true };
+      });
+      
+      // ตรวจสอบผลลัพธ์
+      if (response && !response.available) {
+        setErrors(prev => ({
+          ...prev,
+          username: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว กรุณาเลือกชื่อผู้ใช้อื่น'
+        }));
+        setIsCheckingUsername(false);
+        return false;
+      }
+      
+      // ตรวจสอบผ่าน
+      setIsCheckingUsername(false);
+      return true;
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการตรวจสอบชื่อผู้ใช้:', error);
+      setIsCheckingUsername(false);
+      
+      // กรณีมีข้อผิดพลาด แต่ให้ผ่านไปก่อน (ระบบจะตรวจสอบอีกครั้งตอนลงทะเบียน)
+      return true;
+    }
   };
   
   // ไปขั้นตอนถัดไป
-  const handleNextStep = () => {
-    if (validateStep1()) {
+  const handleNextStep = async () => {
+    // ตรวจสอบข้อมูลก่อนไปขั้นตอนถัดไป
+    const isValid = await validateStep1();
+    
+    if (isValid) {
       setStep(2);
       localStorage.setItem('registrationStep', '2');
     }
@@ -395,10 +488,28 @@ export default function RegisterPage() {
       
       // 4. เปลี่ยนเส้นทางหลังจากลงทะเบียนสำเร็จ
       router.push('/register/success');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error registering:', error);
       setIsUploading(false);
-      setApiError('เกิดข้อผิดพลาดในการสมัครสมาชิก กรุณาลองใหม่อีกครั้ง');
+      
+      // ตรวจสอบประเภทข้อผิดพลาด
+      if (error.response && error.response.data && error.response.data.message) {
+        // ข้อผิดพลาดจาก API
+        setApiError(error.response.data.message);
+        
+        // ตรวจสอบว่าเป็นข้อผิดพลาดเกี่ยวกับชื่อผู้ใช้ซ้ำหรือไม่
+        if (error.response.data.message.includes('ชื่อผู้ใช้') || 
+            error.response.data.message.includes('อีเมลนี้มีผู้ใช้งานแล้ว')) {
+          // กลับไปขั้นตอนที่ 1 เพื่อแก้ไขข้อมูล
+          setStep(1);
+          setErrors({
+            username: error.response.data.message
+          });
+        }
+      } else {
+        // ข้อผิดพลาดทั่วไป
+        setApiError('เกิดข้อผิดพลาดในการสมัครสมาชิก กรุณาลองใหม่อีกครั้ง');
+      }
     } finally {
       setIsUploading(false);
     }
@@ -463,6 +574,12 @@ export default function RegisterPage() {
                   error={errors.username}
                   required
                 />
+                {isCheckingUsername && (
+                  <div className="text-sm text-blue-600 dark:text-blue-400 mt-1 flex items-center">
+                    <div className="animate-spin h-3 w-3 border-t-2 border-b-2 border-blue-500 rounded-full mr-2"></div>
+                    กำลังตรวจสอบชื่อผู้ใช้...
+                  </div>
+                )}
                 
                 <Input
                   label="อีเมล"
@@ -519,6 +636,8 @@ export default function RegisterPage() {
                     type="button"
                     onClick={handleNextStep}
                     className="w-full"
+                    isLoading={isCheckingUsername}
+                    disabled={isCheckingUsername || Boolean(errors.username)}
                   >
                     ต่อไป
                   </Button>

@@ -20,6 +20,7 @@ export default function FaceLoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isMirrored, setIsMirrored] = useState(true);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
   
   // ตำแหน่งกรอบใบหน้า (ใช้ CSS แทน Canvas)
   const [faceBox, setFaceBox] = useState({
@@ -37,13 +38,36 @@ export default function FaceLoginPage() {
       // ถ้ามี token อยู่แล้ว ให้นำไปยังหน้า feed
       router.push('/feed');
     } else {
+      // โหลดโมเดล FaceNet
+      loadFaceNetModel();
+      
       // ตรวจสอบกล้อง
       checkCamera();
-      
-      // เริ่มตรวจจับใบหน้า
-      startFaceDetection();
     }
   }, [router]);
+
+  // โหลดโมเดล FaceNet
+  const loadFaceNetModel = async () => {
+    try {
+      setIsLoading(true);
+      const loaded = await faceNetService.loadModel();
+      setIsModelLoaded(loaded);
+      
+      if (loaded) {
+        console.log('โหลดโมเดล FaceNet สำเร็จ');
+      } else {
+        console.warn('ไม่สามารถโหลดโมเดล FaceNet ได้ จะใช้โหมดจำลองแทน');
+        faceNetService.enableMockMode();
+        setIsModelLoaded(true);
+      }
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการโหลดโมเดล FaceNet:', error);
+      faceNetService.enableMockMode();
+      setIsModelLoaded(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // ตรวจสอบกล้อง
   const checkCamera = async () => {
@@ -58,7 +82,10 @@ export default function FaceLoginPage() {
   };
 
   // เริ่มตรวจจับใบหน้า
-  const startFaceDetection = () => {
+  useEffect(() => {
+    // ตรวจสอบว่าโมเดลโหลดเสร็จแล้ว
+    if (!isModelLoaded || cameraError) return;
+    
     const detectInterval = setInterval(async () => {
       if (
         webcamRef.current &&
@@ -77,14 +104,39 @@ export default function FaceLoginPage() {
               setFaceDetected(true);
               setFaceScore(result.score);
               
-              // อัปเดตตำแหน่งกรอบใบหน้า
-              setFaceBox({
-                top: result.faceBox.top,
-                left: result.faceBox.left,
-                width: result.faceBox.width,
-                height: result.faceBox.height,
-                visible: true
-              });
+              // คำนวณตำแหน่งกรอบใบหน้า
+              if (webcamRef.current && webcamRef.current.video) {
+                const video = webcamRef.current.video;
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+                const displayWidth = video.clientWidth;
+                const displayHeight = video.clientHeight;
+                
+                // อัตราส่วนระหว่างวิดีโอจริงและการแสดงผล
+                const widthRatio = displayWidth / videoWidth;
+                const heightRatio = displayHeight / videoHeight;
+                
+                // ถ้ามีข้อมูล faceBox จาก API
+                if (result.faceBox) {
+                  // อัปเดตตำแหน่งกรอบใบหน้า
+                  setFaceBox({
+                    top: result.faceBox.top * heightRatio,
+                    left: result.faceBox.left * widthRatio,
+                    width: result.faceBox.width * widthRatio,
+                    height: result.faceBox.height * heightRatio,
+                    visible: true
+                  });
+                } else {
+                  // ข้อมูลจำลอง
+                  setFaceBox({
+                    top: 100,
+                    left: 100,
+                    width: 200,
+                    height: 200,
+                    visible: true
+                  });
+                }
+              }
             } else {
               setFaceDetected(false);
               setFaceScore(0);
@@ -92,6 +144,9 @@ export default function FaceLoginPage() {
             }
           } catch (error) {
             console.error('เกิดข้อผิดพลาดในการตรวจจับใบหน้า:', error);
+            setFaceDetected(false);
+            setFaceScore(0);
+            setFaceBox(prev => ({...prev, visible: false}));
           }
         }
       }
@@ -99,7 +154,7 @@ export default function FaceLoginPage() {
     
     // ยกเลิก interval เมื่อคอมโพเนนต์ถูกทำลาย
     return () => clearInterval(detectInterval);
-  };
+  }, [isModelLoaded, cameraError]);
 
   // ทำการเข้าสู่ระบบด้วยใบหน้า
   const handleFaceLogin = async () => {
@@ -120,9 +175,12 @@ export default function FaceLoginPage() {
       }
       
       // สร้าง face embeddings ผ่าน API
+      console.log('กำลังสร้าง embeddings จากรูปภาพ');
       const embeddings = await faceNetService.generateEmbeddings(imageSrc);
       
       // ส่งข้อมูลไปยัง API เพื่อเข้าสู่ระบบ
+      console.log('กำลังส่งข้อมูลไปยัง API เพื่อเข้าสู่ระบบด้วยใบหน้า');
+      
       try {
         const response = await apiService.loginWithFace({
           embeddings,
@@ -152,16 +210,21 @@ export default function FaceLoginPage() {
         } else if (apiError.response && apiError.response.data && apiError.response.data.message) {
           setError(apiError.response.data.message);
         } else {
-          // ในกรณีที่ API ยังไม่สมบูรณ์ ให้จำลองการเข้าสู่ระบบสำเร็จ (สำหรับการทดสอบ)
-          setMessage('(โหมดทดสอบ) เข้าสู่ระบบสำเร็จ กำลังนำคุณไปยังหน้าฟีด...');
+          // การจัดการข้อผิดพลาดทั่วไป
+          setError('เกิดข้อผิดพลาดในการเข้าสู่ระบบด้วยใบหน้า กรุณาลองอีกครั้ง');
           
-          // จำลองการเข้าสู่ระบบด้วย dummy token
-          apiService.setAuthToken('dummy_token_for_testing');
-          
-          // เปลี่ยนเส้นทางหลังจากเข้าสู่ระบบสำเร็จ
-          setTimeout(() => {
-            router.push('/feed');
-          }, 1500);
+          // ถ้าอยู่ในโหมดพัฒนา (Development) ให้จำลองการเข้าสู่ระบบ
+          if (process.env.NODE_ENV === 'development') {
+            setMessage('(โหมดทดสอบ) เข้าสู่ระบบสำเร็จ กำลังนำคุณไปยังหน้าฟีด...');
+            
+            // จำลองการเข้าสู่ระบบด้วย dummy token
+            apiService.setAuthToken('dummy_token_for_testing');
+            
+            // เปลี่ยนเส้นทางหลังจากเข้าสู่ระบบสำเร็จ
+            setTimeout(() => {
+              router.push('/feed');
+            }, 1500);
+          }
         }
       }
     } catch (error) {
@@ -303,6 +366,13 @@ export default function FaceLoginPage() {
                   <span className="text-red-400">ไม่พบใบหน้า</span>
                 )}
               </div>
+              
+              {/* แสดงข้อมูลโหมดจำลอง */}
+              {faceNetService.isMockModeEnabled() && (
+                <div className="absolute top-4 right-4 z-30 bg-yellow-500 bg-opacity-80 text-white px-2 py-1 rounded text-xs">
+                  โหมดจำลอง
+                </div>
+              )}
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
@@ -335,6 +405,15 @@ export default function FaceLoginPage() {
           </div>
         )}
       </div>
+      
+      {/* แสดงข้อมูล debug ในโหมด development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black bg-opacity-75 text-white p-2 rounded text-xs">
+          TensorFlow.js: {faceNetService.getTensorFlowBackend() || 'ไม่พร้อมใช้งาน'} | 
+          GPU: {faceNetService.isUsingGPU() ? 'ใช้งาน' : 'ไม่ใช้งาน'} |
+          Mode: {faceNetService.isMockModeEnabled() ? 'จำลอง' : 'ปกติ'}
+        </div>
+      )}
     </div>
   );
 }

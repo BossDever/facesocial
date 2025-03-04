@@ -35,6 +35,10 @@ class ApiService {
         if (this.authToken) {
           config.headers.Authorization = `Bearer ${this.authToken}`;
         }
+        
+        // แสดงข้อมูล URL ที่กำลังส่งคำขอ (debug)
+        console.log(`กำลังส่งคำขอไปยัง: ${config.method?.toUpperCase()} ${config.url}`);
+        
         return config;
       },
       (error) => {
@@ -180,6 +184,38 @@ class ApiService {
   }
   
   /**
+   * ตรวจสอบชื่อผู้ใช้ว่ามีในระบบแล้วหรือไม่
+   * @param username ชื่อผู้ใช้ที่ต้องการตรวจสอบ
+   * @returns สถานะการตรวจสอบ
+   */
+  async checkUsername(username: string): Promise<{ available: boolean; message: string }> {
+    try {
+      // ใช้เส้นทาง API ที่ถูกต้อง (แก้ไข)
+      const response = await this.axiosInstance.get('/api/auth/check-username', {
+        params: { username }
+      });
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to check username:', error);
+      
+      // กรณีที่ API ยังไม่พร้อมใช้งาน ให้จำลองการตรวจสอบโดยดูว่าชื่อผู้ใช้เป็น admin หรือไม่
+      if (username.toLowerCase() === 'admin') {
+        return {
+          available: false,
+          message: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว'
+        };
+      }
+      
+      // สำหรับชื่อผู้ใช้อื่น ๆ ให้สมมติว่าใช้ได้
+      return {
+        available: true,
+        message: 'ชื่อผู้ใช้นี้สามารถใช้งานได้'
+      };
+    }
+  }
+  
+  /**
    * ลงทะเบียนผู้ใช้ใหม่
    * @param userData ข้อมูลผู้ใช้ (username, email, password, firstName, lastName)
    * @returns ข้อมูลผู้ใช้ที่ลงทะเบียนแล้ว
@@ -214,6 +250,14 @@ class ApiService {
   async storeFaceData(userId: string, faceData: any): Promise<any> {
     try {
       const endpoint = `${API_ENDPOINTS.AUTH.STORE_FACE_DATA}/${userId}`;
+      
+      // แสดงข้อมูลการส่งคำขอ (debug)
+      console.log('กำลังบันทึกข้อมูลใบหน้า:', {
+        userId,
+        endpoint,
+        embeddingsLength: faceData.embeddings?.length
+      });
+      
       const response = await this.axiosInstance.post(endpoint, faceData);
       return response.data;
     } catch (error) {
@@ -255,6 +299,12 @@ class ApiService {
    */
   async loginWithFace(faceData: { embeddings: number[], imageBase64: string }): Promise<any> {
     try {
+      // แสดงข้อมูลขนาดของ embeddings (debug)
+      console.log('กำลังส่งข้อมูลเข้าสู่ระบบด้วยใบหน้า:', {
+        embeddingsLength: faceData.embeddings.length,
+        imageBase64Length: faceData.imageBase64.length
+      });
+      
       const response = await this.axiosInstance.post(API_ENDPOINTS.AUTH.LOGIN_FACE, faceData);
       
       // เก็บ token หลังจากเข้าสู่ระบบสำเร็จ
