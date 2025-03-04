@@ -40,20 +40,37 @@ export const createEmbeddings = async (req: Request, res: Response) => {
   try {
     console.log('API createEmbeddings ถูกเรียกใช้');
     
+    // ตรวจสอบข้อมูลรูปภาพ - รองรับทั้ง JSON และ FormData
+    let imageData = '';
+    
+    // กรณีที่ข้อมูลถูกส่งมาในรูปแบบ JSON
+    if (req.body && req.body.image_data) {
+      imageData = req.body.image_data;
+      console.log('ได้รับข้อมูลรูปภาพจาก JSON body');
+    }
+    // กรณีที่ข้อมูลถูกส่งมาในรูปแบบ FormData
+    else if (req.body && req.body.image_data) {
+      imageData = req.body.image_data;
+      console.log('ได้รับข้อมูลรูปภาพจาก FormData');
+    }
+    
     // ตรวจสอบว่ามีข้อมูลรูปภาพหรือไม่
-    if (!req.body.image_data) {
+    if (!imageData) {
       console.error('ไม่พบข้อมูลรูปภาพในคำขอ');
       return res.status(400).json({
         message: 'ไม่พบข้อมูลรูปภาพ'
       });
     }
     
+    // แสดงข้อมูลขนาดของรูปภาพ (debug)
+    console.log(`ได้รับข้อมูลรูปภาพ ขนาด: ${imageData.length} bytes`);
+    
     // บันทึกข้อมูลการส่งคำขอ (สำหรับ debug)
     console.log('กำลังส่งข้อมูลไปยัง FaceNet API');
     
-    // ส่งข้อมูลไปยัง FaceNet API
+    // สร้าง FormData สำหรับส่งไปยัง FaceNet API
     const formData = new FormData();
-    formData.append('image_data', req.body.image_data);
+    formData.append('image_data', imageData);
     
     console.log(`ส่งคำขอไปยัง ${FACENET_API_URL}/generate-embeddings/base64/`);
     
@@ -115,21 +132,35 @@ export const detectFaces = async (req: Request, res: Response) => {
   try {
     console.log('API detectFaces ถูกเรียกใช้');
     
+    // ตรวจสอบข้อมูลรูปภาพ - รองรับทั้ง JSON และ FormData
+    let imageData = '';
+    
+    // กรณีที่ข้อมูลถูกส่งมาในรูปแบบ JSON
+    if (req.body && req.body.image_data) {
+      imageData = req.body.image_data;
+      console.log('ได้รับข้อมูลรูปภาพจาก JSON body');
+    }
+    // กรณีที่ข้อมูลถูกส่งมาในรูปแบบ FormData
+    else if (req.body && req.body.image_data) {
+      imageData = req.body.image_data;
+      console.log('ได้รับข้อมูลรูปภาพจาก FormData');
+    }
+    
     // ตรวจสอบว่ามีข้อมูลรูปภาพหรือไม่
-    if (!req.body.image_data) {
+    if (!imageData) {
       console.error('ไม่พบข้อมูลรูปภาพในคำขอ');
       return res.status(400).json({
         message: 'ไม่พบข้อมูลรูปภาพ'
       });
     }
     
+    // แสดงข้อมูลขนาดของรูปภาพ (debug)
+    console.log(`ได้รับข้อมูลรูปภาพ ขนาด: ${imageData.length} bytes`);
+    
     // บันทึกข้อมูลว่ากำลังส่งคำขอไปยัง FaceNet API
     console.log('กำลังส่งข้อมูลไปยัง FaceNet API');
     
     // ตรวจสอบรูปแบบของข้อมูลรูปภาพว่าเป็น base64 string ที่ถูกต้องหรือไม่
-    let imageData = req.body.image_data;
-    
-    // ตรวจสอบว่าเป็น data URL หรือไม่
     if (!imageData.startsWith('data:image') && !imageData.startsWith('data:application')) {
       // เพิ่ม prefix ให้กับ base64 string ถ้าไม่มี
       imageData = `data:image/jpeg;base64,${imageData}`;
